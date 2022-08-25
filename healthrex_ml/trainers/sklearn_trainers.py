@@ -1,6 +1,7 @@
 """
 Definition of ModelTrainer, SequenceTrainer
 """
+from asyncio import Task
 from cmath import exp
 import os
 import json
@@ -40,7 +41,7 @@ class LightGBMTrainer():
             objective='binary',
             n_estimators=1000,
             learning_rate=0.01,
-            num_leaves=4
+            num_leaves=32
         )
 
         # Read in train data
@@ -48,6 +49,11 @@ class LightGBMTrainer():
             self.working_dir, 'train_features.npz'))
         y_train = pd.read_csv(
             os.path.join(self.working_dir, 'train_labels.csv'))
+
+        # Remove any rows with missing labels (for censoring tasks)
+        observed_inds = y_train[~y_train[task].isnull()].index
+        X_train = X_train[observed_inds]
+        y_train = y_train.iloc[observed_inds].reset_index()
 
         # Create val data
         val_size = int(len(y_train) * 0.1)  # 10 % of training set
@@ -72,13 +78,20 @@ class LightGBMTrainer():
         y_test = pd.read_csv(
             os.path.join(self.working_dir, 'test_labels.csv'))
 
+        # Remove censored data from test set
+        observed_inds = y_test[~y_test[task].isnull()].index
+        X_test = X_test[observed_inds]
+        y_test = y_test.iloc[observed_inds].reset_index()
+
         # Fit model with early stopping
-        with mlflow.start_run(experiment_id=self.experiment_id):
+        with mlflow.start_run(experiment_id=self.experiment_id,
+                              run_name=task):
             self.clf.fit(X_train,
                         y_train[self.task].values,
                         eval_set=[(X_val, y_val[self.task].values)],
                         eval_metric=['binary', 'auc'],
-                        callbacks=[early_stopping(100)])
+                        callbacks=[early_stopping(100)],
+                        verbose=1)
 
         # Predictions
         predictions = self.clf.predict_proba(X_test)[:, 1]

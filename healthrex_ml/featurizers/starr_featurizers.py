@@ -393,6 +393,10 @@ class BagOfWordsFeaturizer():
             me = extractors.MedicationExtractor(
                 self.cohort_table_id, self.feature_table_id)
             fextractors.append(me)
+        if 'Procedures' in self.feature_config['Categorical']:
+            pre = extractors.ProcedureExtractor(
+                self.cohort_table_id, self.feature_table_id)
+            fextractors.append(pre)
 
         # Get numerical features
         if 'Age' in self.feature_config['Numerical']:
@@ -413,7 +417,7 @@ class BagOfWordsFeaturizer():
                 self.cohort_table_id,
                 self.feature_table_id,
                 bins=self.feature_config['Numerical']['Vitals'][0]['num_bins'],
-                base_names=DEFAULT_FLOWSHEET_FEATURES)
+                flowsheet_descriptions=DEFAULT_FLOWSHEET_FEATURES)
             fextractors.append(fbe)
 
         # Call extractors and collect any look up tables

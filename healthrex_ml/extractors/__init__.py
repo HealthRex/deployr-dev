@@ -6,6 +6,7 @@ from healthrex_ml.extractors.starr_extractors import (
     SexExtractor,
     RaceExtractor,
     AgeExtractor,
+    ProcedureExtractor,
     table_exists,
     add_create_or_append_logic,
     REPLACE_TABLE

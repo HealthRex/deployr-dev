@@ -3,7 +3,9 @@ DEFAULT_DEPLOY_CONFIG = {
         'Sex': [{'look_back': None}],
         'Race': [{'look_back': None}],
         'Diagnoses': [{'look_back': None}],
-        'Medications': [{'look_back': 28}]
+        'Medications': [{'look_back': 28}],
+        'Procedures': [{'look_back': 28}]
+
     },
     'Numerical': {
         'Age': [{'look_back': None, 'num_bins': 5}],
@@ -16,6 +18,7 @@ DEFAULT_LAB_COMPONENT_IDS = [
     'WBC',  # White Blood Cell
     'HCT',  # Hematocrit
     'PLT',  # Platelet Count
+    'MG', # Magnesium
     'NA',  # Sodium, Whole Blood
     'K',  # Potassium, Whole Blood
     'CO2',  # CO2, Serum/Plasma
@@ -33,7 +36,8 @@ DEFAULT_LAB_COMPONENT_IDS = [
     'PCO2A',  # Arterial pCO2
     'PHV',  # Venous pH
     'PO2V',  # Venous pO2
-    'PCO2V'  # Venous pCO2
+    'PCO2V',  # Venous pCO2
+    'CAION'  # Ionized Calcium
 ]
 
 DEFAULT_FLOWSHEET_FEATURES = [

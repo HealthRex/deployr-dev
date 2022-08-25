@@ -268,6 +268,166 @@ class ThirtyDayReadmission(CohortBuilder):
         query_job = self.client.query(query)
         query_job.result()
 
+class CBCWithDifferentialED(CohortBuilder):
+    """
+    For Censoring mechanisms in applied ML paper. Task is predict normality
+    of cbc with differential componenents upon arrival to ED. Track first
+    CBC with diff within the encounter, and track whether CBC with D was ordered
+    to begin with.
+    """
+
+    def __init__(self, client, dataset_name, table_name,
+                 working_project_id='mining-clinical-decisions'):
+        """
+        Initializes dataset_name and table_name for where cohort table will be
+        saved on bigquery
+        """
+        super(CBCWithDifferentialED, self).__init__(client, dataset_name,
+              table_name, working_project_id)
+
+    def __call__(self):
+        """
+        Function that constructs a cohort table for predicting cbc with
+        differential results. Done with SQL logic where possible
+        """
+        query = f"""
+        CREATE OR REPLACE TABLE 
+        {self.project_id}.{self.dataset_name}.{self.table_name}
+        AS (
+        WITH ER_ADMITS AS (
+        SELECT 
+            anon_id, pat_enc_csn_id_coded, 
+            min(event_time_jittered_utc) as er_admit_time,
+            max(event_time_jittered_utc) as er_transfer_out_time
+        FROM 
+            `som-nero-phi-jonc101.shc_core_2021.adt`
+        WHERE
+            pat_class_c = "112" AND pat_service = "Emergency"
+            AND EXTRACT(YEAR FROM event_time_jittered_utc) >= 2015
+        GROUP BY
+            anon_id, pat_enc_csn_id_coded
+        ),
+
+        ER_ADMITS_DISCHARGE_TIME as (
+        SELECT 
+            er.anon_id, er.pat_enc_csn_id_coded,
+            er.er_admit_time, er.er_transfer_out_time,
+            MAX(adt.effective_time_jittered_utc) discharge_time
+        FROM
+            `som-nero-phi-jonc101.shc_core_2021.adt` adt
+        INNER JOIN
+            ER_ADMITS er
+        USING
+            (anon_id, pat_enc_csn_id_coded)
+        GROUP BY
+            er.anon_id, er.pat_enc_csn_id_coded,
+            er.er_admit_time, er.er_transfer_out_time
+        ),
+
+        # Join above with lab results ,filter to  labs ordered between admit to
+        # discharge
+        cbcd_lab_results as (
+        SELECT DISTINCT
+            anon_id,
+            er.pat_enc_csn_id_coded,
+            er_admit_time,
+            discharge_time,
+            order_id_coded,
+            order_time_utc as index_time,
+            ordering_mode,
+            base_name,
+            CASE WHEN result_flag is NULL OR result_flag = "Normal" Then 0
+            ELSE 1
+            END label
+        FROM 
+            som-nero-phi-jonc101.shc_core_2021.lab_result
+        INNER JOIN
+            ER_ADMITS_DISCHARGE_TIME er
+        USING
+            (anon_id)
+        WHERE 
+            # Note no inpatient results where proc code was LABCBCD
+            UPPER(group_lab_name) = 'CBC WITH DIFFERENTIAL'
+        AND
+            base_name in ('WBC', 'PLT', 'HCT', 'HGB')
+        AND 
+            order_time_utc BETWEEN er.er_admit_time AND er.discharge_time
+        ),
+
+        # Pivot lab result to wide
+        cohort_wide as (
+            SELECT 
+                * 
+            FROM 
+                cbcd_lab_results
+            PIVOT (
+                MAX(label) as label -- should be max of one value or no value 
+                FOR base_name in ('WBC', 'PLT', 'HCT', 'HGB')
+            )
+            WHERE 
+                -- only keep labs where all three components result
+                label_WBC is not NULL AND
+                label_PLT is not NULL AND
+                label_HCT is not NULL AND
+                label_HGB is not NULL
+        ),
+
+        first_orders as (
+        SELECT
+            FIRST_VALUE(order_id_coded) 
+            OVER (PARTITION BY pat_enc_csn_id_coded ORDER BY index_time)
+            order_id_coded
+        FROM
+            cohort_wide
+        ),
+
+        cohort_wide_first_orders as (
+        SELECT DISTINCT
+            *
+        FROM
+            cohort_wide
+        INNER JOIN
+            first_orders
+        USING
+            (order_id_coded)
+        ),
+
+        full_cohort AS (
+        SELECT
+            er.anon_id,
+            er.pat_enc_csn_id_coded observation_id,
+            er.er_admit_time index_time,
+            er.discharge_time discharge_time,
+            cohort.label_WBC,
+            cohort.label_HCT,
+            cohort.label_HGB,
+            cohort.label_PLT,
+            CASE WHEN cohort.order_id_coded IS NULL THEN 1 ELSE 0 END 
+            labels_censored
+        FROM
+            ER_ADMITS_DISCHARGE_TIME er
+        LEFT JOIN
+            cohort_wide_first_orders cohort
+        USING
+            (pat_enc_csn_id_coded)
+        )
+
+        SELECT
+        *
+        FROM
+        (SELECT *,
+                ROW_NUMBER() OVER  (PARTITION BY EXTRACT(YEAR FROM index_time)
+                                    ORDER BY RAND()) AS seqnum
+        FROM 
+            full_cohort 
+        )
+        WHERE
+            seqnum <= 10000
+        )
+        
+        """
+        query_job = self.client.query(query)
+        query_job.result()
 
 class CBCWithDifferentialCohort(CohortBuilder):
     """
@@ -437,6 +597,305 @@ class MetabolicComprehensiveCohort(CohortBuilder):
         query_job.result()
 
 
+class Hematocrit(CohortBuilder):
+    """
+    Defines a cohort and labels for hematocrit prediction models
+    """
+
+    def __init__(self, client, dataset_name, table_name,
+                 working_project_id='mining-clinical-decisions'):
+        """
+        Initializes dataset_name and table_name for where cohort table will be
+        saved on bigquery
+        """
+        super(Hematocrit, self).__init__(client,
+                                dataset_name, table_name, working_project_id)
+
+    def __call__(self):
+        """
+        Function that constructs a cohort table for predicting cbc with
+        differential results. Done with SQL logic where possible
+
+        """
+        query = f"""
+        CREATE OR REPLACE TABLE 
+        {self.project_id}.{self.dataset_name}.{self.table_name}
+        AS (
+        WITH magnesium_results as (
+        SELECT DISTINCT
+            anon_id, order_id_coded, order_time_utc as index_time,
+            ordering_mode, base_name,
+            CASE WHEN result_flag is NULL OR result_flag = "Normal" Then 0
+            ELSE 1 END label
+        FROM 
+            som-nero-phi-jonc101.shc_core_2021.lab_result
+        WHERE 
+            UPPER(group_lab_name) = 'HEMATOCRIT'
+        AND
+            base_name = 'HCT'
+        AND 
+            EXTRACT(YEAR FROM order_time_utc) BETWEEN 2015 and 2021
+        ),
+
+        # Pivot lab result to wide
+        cohort_wide as (
+            SELECT 
+                * 
+            FROM 
+                magnesium_results
+            PIVOT (
+                MAX(label) as label -- should be max of one value or no value 
+                FOR base_name in ('HCT')
+            )
+            WHERE 
+                -- only keep labs where all three components result
+                label_HCT is not NULL 
+        )
+
+        ### 10000 observations randomly sampled per year from train set
+        SELECT 
+            anon_id, order_id_coded as observation_id, index_time, 
+            ordering_mode, label_HCT
+        FROM 
+            (SELECT *,
+                ROW_NUMBER() OVER  (PARTITION BY EXTRACT(YEAR FROM index_time)
+                                    ORDER BY RAND()) 
+                        AS seqnum
+            FROM cohort_wide 
+            ) 
+        WHERE
+            seqnum <= 10000
+        )
+        
+        """
+        query_job = self.client.query(query)
+        query_job.result()
+
+
+class TroponinI(CohortBuilder):
+    """
+    Defines a cohort and labels for Troponin I prediction models
+    """
+
+    def __init__(self, client, dataset_name, table_name,
+                 working_project_id='mining-clinical-decisions'):
+        """
+        Initializes dataset_name and table_name for where cohort table will be
+        saved on bigquery
+        """
+        super(TroponinI, self).__init__(client,
+                            dataset_name, table_name, working_project_id)
+
+    def __call__(self):
+        """
+        Function that constructs a cohort table for predicting cbc with
+        differential results. Done with SQL logic where possible
+
+        """
+        query = f"""
+        CREATE OR REPLACE TABLE 
+        {self.project_id}.{self.dataset_name}.{self.table_name}
+        AS (
+        WITH magnesium_results as (
+        SELECT DISTINCT
+            anon_id, order_id_coded, order_time_utc as index_time,
+            ordering_mode, base_name,
+            CASE WHEN result_flag is NULL OR result_flag = "Normal" Then 0
+            ELSE 1 END label
+        FROM 
+            som-nero-phi-jonc101.shc_core_2021.lab_result
+        WHERE 
+            UPPER(group_lab_name) = 'TROPONIN I'
+        AND
+            base_name = 'TNI'
+        AND 
+            EXTRACT(YEAR FROM order_time_utc) BETWEEN 2015 and 2021
+        ),
+
+        # Pivot lab result to wide
+        cohort_wide as (
+            SELECT 
+                * 
+            FROM 
+                magnesium_results
+            PIVOT (
+                MAX(label) as label -- should be max of one value or no value 
+                FOR base_name in ('TNI')
+            )
+            WHERE 
+                -- only keep labs where all three components result
+                label_TNI is not NULL 
+        )
+
+        ### 10000 observations randomly sampled per year from train set
+        SELECT 
+            anon_id, order_id_coded as observation_id, index_time, 
+            ordering_mode, label_TNI
+        FROM 
+            (SELECT *,
+                ROW_NUMBER() OVER  (PARTITION BY EXTRACT(YEAR FROM index_time)
+                                    ORDER BY RAND()) 
+                        AS seqnum
+            FROM cohort_wide 
+            ) 
+        WHERE
+            seqnum <= 10000
+        )
+        
+        """
+        query_job = self.client.query(query)
+        query_job.result()
+
+
+class Sodium(CohortBuilder):
+    """
+    Defines a cohort and labels for Troponin I prediction models
+    """
+
+    def __init__(self, client, dataset_name, table_name,
+                 working_project_id='mining-clinical-decisions'):
+        """
+        Initializes dataset_name and table_name for where cohort table will be
+        saved on bigquery
+        """
+        super(Sodium, self).__init__(client,
+                                dataset_name, table_name, working_project_id)
+
+    def __call__(self):
+        """
+        Function that constructs a cohort table for predicting cbc with
+        differential results. Done with SQL logic where possible
+
+        """
+        query = f"""
+        CREATE OR REPLACE TABLE 
+        {self.project_id}.{self.dataset_name}.{self.table_name}
+        AS (
+        WITH magnesium_results as (
+        SELECT DISTINCT
+            anon_id, order_id_coded, order_time_utc as index_time,
+            ordering_mode, base_name,
+            CASE WHEN result_flag is NULL OR result_flag = "Normal" Then 0
+            ELSE 1 END label
+        FROM 
+            som-nero-phi-jonc101.shc_core_2021.lab_result
+        WHERE 
+            UPPER(group_lab_name) = 'SODIUM, SERUM / PLASMA'
+        AND
+            base_name = 'NA'
+        AND 
+            EXTRACT(YEAR FROM order_time_utc) BETWEEN 2015 and 2021
+        ),
+
+        # Pivot lab result to wide
+        cohort_wide as (
+            SELECT 
+                * 
+            FROM 
+                magnesium_results
+            PIVOT (
+                MAX(label) as label -- should be max of one value or no value 
+                FOR base_name in ('NA')
+            )
+            WHERE 
+                -- only keep labs where all three components result
+                label_NA is not NULL 
+        )
+
+        ### 10000 observations randomly sampled per year from train set
+        SELECT 
+            anon_id, order_id_coded as observation_id, index_time, 
+            ordering_mode, label_NA
+        FROM 
+            (SELECT *,
+                ROW_NUMBER() OVER  (PARTITION BY EXTRACT(YEAR FROM index_time)
+                                    ORDER BY RAND()) 
+                        AS seqnum
+            FROM cohort_wide 
+            ) 
+        WHERE
+            seqnum <= 10000
+        )
+        
+        """
+        query_job = self.client.query(query)
+        query_job.result()
+
+
+class CalciumIonized(CohortBuilder):
+    """
+    Defines a cohort and labels for Calcium prediction models
+    """
+
+    def __init__(self, client, dataset_name, table_name,
+                 working_project_id='mining-clinical-decisions'):
+        """
+        Initializes dataset_name and table_name for where cohort table will be
+        saved on bigquery
+        """
+        super(CalciumIonized, self).__init__(client,
+                                dataset_name, table_name, working_project_id)
+
+    def __call__(self):
+        """
+        Function that constructs a cohort table for predicting cbc with
+        differential results. Done with SQL logic where possible
+
+        """
+        query = f"""
+        CREATE OR REPLACE TABLE 
+        {self.project_id}.{self.dataset_name}.{self.table_name}
+        AS (
+        WITH magnesium_results as (
+        SELECT DISTINCT
+            anon_id, order_id_coded, order_time_utc as index_time,
+            ordering_mode, base_name,
+            CASE WHEN result_flag is NULL OR result_flag = "Normal" Then 0
+            ELSE 1 END label
+        FROM 
+            som-nero-phi-jonc101.shc_core_2021.lab_result
+        WHERE 
+            UPPER(group_lab_name) = 'CALCIUM IONIZED, SERUM/PLASMA'
+        AND
+            base_name = 'CAION'
+        AND 
+            EXTRACT(YEAR FROM order_time_utc) BETWEEN 2015 and 2021
+        ),
+
+        # Pivot lab result to wide
+        cohort_wide as (
+            SELECT 
+                * 
+            FROM 
+                magnesium_results
+            PIVOT (
+                MAX(label) as label -- should be max of one value or no value 
+                FOR base_name in ('CAION')
+            )
+            WHERE 
+                -- only keep labs where all three components result
+                label_CAION is not NULL 
+        )
+
+        ### 10000 observations randomly sampled per year from train set
+        SELECT 
+            anon_id, order_id_coded as observation_id, index_time, 
+            ordering_mode, label_CAION
+        FROM 
+            (SELECT *,
+                ROW_NUMBER() OVER  (PARTITION BY EXTRACT(YEAR FROM index_time)
+                                    ORDER BY RAND()) 
+                        AS seqnum
+            FROM cohort_wide 
+            ) 
+        WHERE
+            seqnum <= 10000
+        )
+        
+        """
+        query_job = self.client.query(query)
+        query_job.result()
+
 class MagnesiumCohort(CohortBuilder):
     """
     Defines a cohort and labels for magnesium prediction models
@@ -510,7 +969,6 @@ class MagnesiumCohort(CohortBuilder):
         """
         query_job = self.client.query(query)
         query_job.result()
-
 
 class BloodCultureCohort(CohortBuilder):
     """
