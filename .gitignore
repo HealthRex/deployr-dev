@@ -9,7 +9,6 @@ __pycache__/
 # examples
 examples/hemestamp/runs/
 projects/
-healthrex_ml/models/
 
 # Distribution / packaging
 .Python
