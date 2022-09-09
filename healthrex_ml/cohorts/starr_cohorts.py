@@ -780,7 +780,7 @@ class Sodium(CohortBuilder):
         FROM 
             som-nero-phi-jonc101.shc_core_2021.lab_result
         WHERE 
-            UPPER(group_lab_name) = 'SODIUM, SERUM / PLASMA'
+            proc_code = "LABNA"
         AND
             base_name = 'NA'
         AND 

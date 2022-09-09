@@ -6,7 +6,6 @@ TODO: Definition of SummaryStatFeaturizer
 import json
 import os
 from re import S
-from typing_extensions import Self
 import pandas as pd
 import pickle
 from google.cloud import bigquery
@@ -77,8 +76,8 @@ class SequenceFeaturizer():
         Generates sequence feature vectors and saves to outpath
         """
         label_cols = ', '.join([f"c.{l}" for l in self.label_columns])
-        # self.construct_feature_timeline()
-        # self.collapse_timeline_to_days()
+        self.construct_feature_timeline()
+        self.collapse_timeline_to_days()
         query = f"""
         SELECT
             f.*, {label_cols}, index_time
@@ -212,16 +211,16 @@ class SequenceFeaturizer():
             lre = extractors.LabResultBinsExtractor(
                 self.cohort_table_id,
                 self.feature_table_id,
+                base_names=DEFAULT_LAB_COMPONENT_IDS,
                 bins=self.feature_config['Numerical']
-                ['LabResults'][0]['num_bins'],
-                base_names=DEFAULT_LAB_COMPONENT_IDS)
+                ['LabResults'][0]['num_bins'])
             fextractors.append(lre)
         if 'Vitals' in self.feature_config['Numerical']:
             fbe = extractors.FlowsheetBinsExtractor(
                 self.cohort_table_id,
                 self.feature_table_id,
-                bins=self.feature_config['Numerical']['Vitals'][0]['num_bins'],
-                base_names=DEFAULT_FLOWSHEET_FEATURES)
+                flowsheet_descriptions=DEFAULT_FLOWSHEET_FEATURES,
+                bins=self.feature_config['Numerical']['Vitals'][0]['num_bins'])
             fextractors.append(fbe)
 
         # Call extractors and collect any look up tables

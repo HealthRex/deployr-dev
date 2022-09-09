@@ -21,12 +21,10 @@ def custom_collate(data):
     inputs_unwound_padded = pad_sequence(inputs_unwound, batch_first=True)
     inputs_padded = torch.split(inputs_unwound_padded, patient_lens)
     inputs_padded = pad_sequence(inputs_padded, batch_first=True)
-    time_deltas = [torch.exp(torch.tensor(d['time_deltas'])*-1) for d in data]
-    time_deltas = pad_sequence(time_deltas, batch_first=True)
+    
     return {
         'sequence': inputs_padded,
         'labels': torch.tensor([lab[0][0] for lab in labels]),  # refactor
-        'time_deltas': time_deltas,
         'lengths': patient_lens
     }
 
@@ -54,7 +52,5 @@ class SequenceDataset(torch.utils.data.Dataset):
             labels = data['labels'][0]
         else:
             labels = data['labels']
-        time_deltas = data['time_deltas']
         return {'sequence': sequence,
-                'labels': labels,
-                'time_deltas': time_deltas}
+                'labels': labels.astype(int)}

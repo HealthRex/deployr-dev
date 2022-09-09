@@ -15,8 +15,11 @@ DEFAULT_DEPLOY_CONFIG = {
 }
 
 DEFAULT_LAB_COMPONENT_IDS = [
+    'GLU', # Glucose
     'WBC',  # White Blood Cell
+    'RBC', # Red Blood Cell
     'HCT',  # Hematocrit
+    'HGB', # Hemoglobin
     'PLT',  # Platelet Count
     'MG', # Magnesium
     'NA',  # Sodium, Whole Blood
@@ -24,6 +27,11 @@ DEFAULT_LAB_COMPONENT_IDS = [
     'CO2',  # CO2, Serum/Plasma
     'BUN',  # Blood Urea Nitrogen
     'CR',  # Creatinine
+    'CL', # Chloride
+    'LYM', # Lymphocites
+    'MONO', # Monocytes
+    'NEUTAB', # Absolute neutrophils
+    'NEUT' # Neutrophils
     'TBIL',  # Total Bilirubin
     'ALB',  # Albumin
     'CA',  # Calcium

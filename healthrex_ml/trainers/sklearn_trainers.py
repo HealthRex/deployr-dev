@@ -14,7 +14,6 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import roc_auc_score
 from scipy.sparse import load_npz
 from tqdm import tqdm
-import mlflow
 
 from healthrex_ml.featurizers import DEFAULT_LAB_COMPONENT_IDS
 from healthrex_ml.featurizers import DEFAULT_FLOWSHEET_FEATURES
@@ -26,9 +25,8 @@ class LightGBMTrainer():
     Trains a gbm (LightGBM) and performs appropriate model selection. 
     """
 
-    def __init__(self, working_dir, experiment_id):
+    def __init__(self, working_dir):
         self.working_dir = working_dir
-        self.experiment_id = experiment_id
 
     def __call__(self, task):
         """
@@ -56,7 +54,7 @@ class LightGBMTrainer():
         y_train = y_train.iloc[observed_inds].reset_index()
 
         # Create val data
-        val_size = int(len(y_train) * 0.1)  # 10 % of training set
+        val_size = int(len(y_train) * 0.15)  # 15 % of training set
         val_inds = y_train.sort_values('index_time', ascending=False).head(
             val_size).index.values
         X_val = X_train[val_inds]
@@ -84,14 +82,12 @@ class LightGBMTrainer():
         y_test = y_test.iloc[observed_inds].reset_index()
 
         # Fit model with early stopping
-        with mlflow.start_run(experiment_id=self.experiment_id,
-                              run_name=task):
-            self.clf.fit(X_train,
-                        y_train[self.task].values,
-                        eval_set=[(X_val, y_val[self.task].values)],
-                        eval_metric=['binary', 'auc'],
-                        callbacks=[early_stopping(100)],
-                        verbose=1)
+        self.clf.fit(X_train,
+                    y_train[self.task].values,
+                    eval_set=[(X_val, y_val[self.task].values)],
+                    eval_metric=['binary', 'auc'],
+                    callbacks=[early_stopping(100)],
+                    verbose=1)
 
         # Predictions
         predictions = self.clf.predict_proba(X_test)[:, 1]

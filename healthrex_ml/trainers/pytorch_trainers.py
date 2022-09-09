@@ -82,8 +82,7 @@ class SequenceTrainer():
             sequence = batch['sequence'].to(self.device)
             seq_lengths = batch['lengths']
             labels = batch['labels'].to(self.device)
-            time_deltas = batch['time_deltas'].to(self.device)
-            output = self.model(sequence, seq_lengths, time_deltas)
+            output = self.model(sequence.int(), seq_lengths)
             loss = self.criterion(output, labels.float())
             train_loss += loss.item()
             loss.backward()
@@ -110,8 +109,7 @@ class SequenceTrainer():
             sequence = batch['sequence'].to(self.device)
             seq_lengths = batch['lengths']
             labels = batch['labels'].to(self.device)
-            time_deltas = batch['time_deltas'].to(self.device)
-            output = self.model(sequence, seq_lengths, time_deltas)
+            output = self.model(sequence.int(), seq_lengths)
             loss = self.criterion(output, labels.float())
             total_loss += loss.item()
             predictions.append(output.cpu().detach().numpy())
