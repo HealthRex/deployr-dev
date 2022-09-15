@@ -7,6 +7,7 @@ from google.cloud import bigquery
 import os
 import pandas as pd
 import sys
+import json
 
 from healthrex_ml.cohorts import *
 from healthrex_ml.trainers import *
@@ -22,7 +23,7 @@ client = bigquery.Client()
 parser = argparse.ArgumentParser(description='Build cohorts, featurize, train')
 parser.add_argument(
     '--run_name',
-    default='20220908',
+    default='20220915_hemestamp_run',
     help='Ex: date of execution'
 )
 parser.add_argument(
@@ -82,20 +83,25 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
+args_dict =  vars(args)
+os.makedirs(f"./runs/{args.run_name}_{args.outpath}", exist_ok=True)
+with open(f"./runs/{args.run_name}_{args.outpath}/command_args.json", 'w') as f:
+    json.dump(args_dict, f)
+
 # Feature config
 FEATURE_CONFIG = {
     'Categorical': {
         'Sex': [{'look_back': None}],
-        'Race': [{'look_back': None}],
-        'Diagnoses': [{'look_back': None}], # None implies infinite look back
-        'Medications': [{'look_back': 28}],
+        # 'Race': [{'look_back': None}],
+        # 'Diagnoses': [{'look_back': None}], # None implies infinite look back
+        # 'Medications': [{'look_back': 28}],
         # 'Procedures': [{'look_back': 28}]
 
     },
     'Numerical': {
         'Age': [{'look_back': None, 'num_bins': 5}],
         'LabResults': [{'look_back': 180, 'num_bins': 5}],
-        'Vitals': [{'look_back': 3, 'num_bins': 5}]
+        # 'Vitals': [{'look_back': 3, 'num_bins': 5}]
     }
 }
 

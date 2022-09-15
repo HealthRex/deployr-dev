@@ -388,13 +388,19 @@ class BagOfWordsFeaturizer():
             pe = extractors.PatientProblemExtractor(
                 self.cohort_table_id, self.feature_table_id)
             fextractors.append(pe)
+
         if 'Medications' in self.feature_config['Categorical']:
             me = extractors.MedicationExtractor(
-                self.cohort_table_id, self.feature_table_id)
+                self.cohort_table_id, self.feature_table_id,
+                    look_back_days=self.feature_config['Categorical'
+                    ]['Medications'][0]['look_back'])
+
             fextractors.append(me)
         if 'Procedures' in self.feature_config['Categorical']:
             pre = extractors.ProcedureExtractor(
-                self.cohort_table_id, self.feature_table_id)
+                self.cohort_table_id, self.feature_table_id,
+                look_back_days=self.feature_config['Categorical'
+                    ]['Procedures'][0]['look_back'])
             fextractors.append(pre)
 
         # Get numerical features
@@ -406,15 +412,19 @@ class BagOfWordsFeaturizer():
             fextractors.append(ae)
         if 'LabResults' in self.feature_config['Numerical']:
             lre = extractors.LabResultBinsExtractor(self.cohort_table_id,
-                                                     self.feature_table_id,
-                                                     bins=self.feature_config['Numerical']
-                                                     ['LabResults'][0]['num_bins'],
-                                                     base_names=DEFAULT_LAB_COMPONENT_IDS)
+                                                    self.feature_table_id,
+                                                    bins=self.feature_config['Numerical']
+                                                    ['LabResults'][0]['num_bins'],
+                                                    look_back_days=self.feature_config['Numerical']
+                                                    ['LabResults'][0]['look_back'],
+                                                    base_names=DEFAULT_LAB_COMPONENT_IDS)
             fextractors.append(lre)
         if 'Vitals' in self.feature_config['Numerical']:
             fbe = extractors.FlowsheetBinsExtractor(
                 self.cohort_table_id,
                 self.feature_table_id,
+                look_back_days=self.feature_config['Numerical']
+                    ['Vitals'][0]['look_back'],
                 bins=self.feature_config['Numerical']['Vitals'][0]['num_bins'],
                 flowsheet_descriptions=DEFAULT_FLOWSHEET_FEATURES)
             fextractors.append(fbe)
