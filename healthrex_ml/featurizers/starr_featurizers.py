@@ -199,6 +199,13 @@ class SequenceFeaturizer():
             me = extractors.MedicationExtractor(
                 self.cohort_table_id, self.feature_table_id)
             fextractors.append(me)
+        if 'Lab Orders' in self.feature_config['Categorical']:
+            lo = extractors.LabOrderExtractor(
+                self.cohort_table_id, self.feature_table_id,
+                look_back_days=self.feature_config['Categorical'
+                    ]['Lab Orders'][0]['look_back'])
+            fextractors.append(lo)
+
 
         # Get numerical features
         if 'Age' in self.feature_config['Numerical']:
@@ -394,14 +401,21 @@ class BagOfWordsFeaturizer():
                 self.cohort_table_id, self.feature_table_id,
                     look_back_days=self.feature_config['Categorical'
                     ]['Medications'][0]['look_back'])
-
             fextractors.append(me)
+
         if 'Procedures' in self.feature_config['Categorical']:
             pre = extractors.ProcedureExtractor(
                 self.cohort_table_id, self.feature_table_id,
                 look_back_days=self.feature_config['Categorical'
                     ]['Procedures'][0]['look_back'])
             fextractors.append(pre)
+
+        if 'Lab Orders' in self.feature_config['Categorical']:
+            lo = extractors.LabOrderExtractor(
+                self.cohort_table_id, self.feature_table_id,
+                look_back_days=self.feature_config['Categorical'
+                    ]['Lab Orders'][0]['look_back'])
+            fextractors.append(lo)
 
         # Get numerical features
         if 'Age' in self.feature_config['Numerical']:

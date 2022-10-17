@@ -395,6 +395,62 @@ class ProcedureExtractor():
         query_job = self.client.query(query)
         query_job.result()
 
+class LabOrderExtractor():
+    """
+    Defines logic to extract lab orders (including microbiology labs) from 
+    order_proc
+    """
+
+    def __init__(self, cohort_table_id, feature_table_id,
+                 look_back_days=28, project_id='som-nero-phi-jonc101',
+                 dataset='shc_core_2021'):
+        """
+        Args:
+            cohort_table: name of cohort table -- used to join to features
+            project_id: name of project you are extracting data from
+            dataset: name of dataset you are extracting data from
+        """
+        self.cohort_table_id = cohort_table_id
+        self.look_back_days = look_back_days
+        self.project_id = project_id
+        self.dataset = dataset
+        self.feature_table_id = feature_table_id
+        self.client = bigquery.Client()
+
+    def __call__(self):
+        """
+        Executes queries and returns all 
+        """
+        query = f"""
+        SELECT DISTINCT
+            labels.observation_id,
+            labels.index_time,
+            'Lab Orders' as feature_type,
+            op.order_time_jittered_utc as feature_time,
+            CAST(op.order_proc_id_coded as STRING) as feature_id,
+            op.description as feature,
+            1 as value
+        FROM
+            {self.cohort_table_id}
+            labels
+        LEFT JOIN
+            {self.project_id}.{self.dataset}.order_proc op
+        ON
+            labels.anon_id = op.anon_id
+        WHERE 
+            order_type in ('Lab', 'Microbiology Culture', 'Microbiology')
+        AND
+            CAST(op.order_time_jittered_utc as TIMESTAMP) < labels.index_time
+        AND
+            TIMESTAMP_ADD(op.order_time_jittered_utc,
+                          INTERVAL 24*{self.look_back_days} HOUR)
+                          >= labels.index_time
+        """
+        query = add_create_or_append_logic(query, self.feature_table_id)
+        query_job = self.client.query(query)
+        query_job.result()
+
+
 class PatientProblemExtractor():
     """
     Defines logic to extract diagnoses on the patient's problem list
