@@ -35,7 +35,7 @@ class InpatientMortalityCohort(CohortBuilder):
             ELSE REPLACE(out_event_type, ' ', '') END event_type,
             event_time_jittered_utc
         FROM
-            `som-nero-phi-jonc101.shc_core.adt` 
+            `som-nero-phi-jonc101.shc_core_2021.adt` 
         WHERE
             pat_class = 'Inpatient' AND
             (in_event_type = 'Admission' or out_event_type in 
@@ -48,7 +48,7 @@ class InpatientMortalityCohort(CohortBuilder):
         FROM
             inpatient_admits ia
         INNER JOIN
-            `som-nero-phi-jonc101.shc_core.demographic` d
+            `som-nero-phi-jonc101.shc_core_2021.demographic` d
         USING
             (anon_id)
         ),
@@ -64,10 +64,11 @@ class InpatientMortalityCohort(CohortBuilder):
             FOR event_type in ('Admission', 'TransferOut', 'Discharge')
         )
             ORDER BY anon_id, event_time_Admission
-        )
+        ),
         -- label is one when date of death exists between admission and
         -- discharge, or between admission and transfer out if discharge
         -- does not exist. 
+        full_cohort as (
         SELECT
             anon_id, pat_enc_csn_id_coded observation_id,
             event_time_Admission index_time, 
@@ -82,9 +83,21 @@ class InpatientMortalityCohort(CohortBuilder):
         FROM
             admissions_wide a
         WHERE
-            EXTRACT(YEAR FROM event_time_Admission) BETWEEN 2015 and 2020
+            EXTRACT(YEAR FROM event_time_Admission) BETWEEN 2009 and 2021
             AND NOT (event_time_TransferOut IS NULL 
                      AND event_time_Discharge IS NULL)
+        )
+        SELECT
+        *
+        FROM
+        (SELECT *,
+                ROW_NUMBER() OVER  (PARTITION BY EXTRACT(YEAR FROM index_time)
+                                    ORDER BY RAND()) AS seqnum
+        FROM 
+            full_cohort 
+        )
+        WHERE
+            seqnum <= 2000
         )        
         """
         query_job = self.client.query(query)
@@ -124,7 +137,7 @@ class LongLengthOfStayCohort(CohortBuilder):
             ELSE REPLACE(out_event_type, ' ', '') END event_type,
             event_time_jittered_utc
         FROM
-            `som-nero-phi-jonc101.shc_core.adt` 
+            `som-nero-phi-jonc101.shc_core_2021.adt` 
         WHERE
             pat_class = 'Inpatient' AND
             (in_event_type = 'Admission' or out_event_type in 
@@ -141,8 +154,9 @@ class LongLengthOfStayCohort(CohortBuilder):
             FOR event_type in ('Admission', 'TransferOut', 'Discharge')
         )
             ORDER BY anon_id, event_time_Admission
-        )
+        ),
 
+        full_cohort as (
         SELECT
             anon_id, pat_enc_csn_id_coded observation_id,
             event_time_Admission index_time, 
@@ -162,9 +176,22 @@ class LongLengthOfStayCohort(CohortBuilder):
         FROM
             admissions_wide a
         WHERE
-            EXTRACT(YEAR FROM event_time_Admission) BETWEEN 2015 and 2020
+            EXTRACT(YEAR FROM event_time_Admission) BETWEEN 2009 and 2021
             AND NOT (event_time_TransferOut IS NULL AND event_time_Discharge
             IS NULL)
+        )
+        SELECT
+        *
+        FROM
+        (SELECT *,
+                ROW_NUMBER() OVER  (PARTITION BY EXTRACT(YEAR FROM index_time)
+                                    ORDER BY RAND()) AS seqnum
+        FROM 
+            full_cohort 
+        )
+        WHERE
+            seqnum <= 2000
+
         )
         """
         query_job = self.client.query(query)
@@ -202,7 +229,7 @@ class ThirtyDayReadmission(CohortBuilder):
             ELSE REPLACE(out_event_type, ' ', '') END event_type,
             event_time_jittered_utc
         FROM
-            `som-nero-phi-jonc101.shc_core.adt` 
+            `som-nero-phi-jonc101.shc_core_2021.adt` 
         WHERE
             pat_class = 'Inpatient' AND
             (in_event_type = 'Admission' or out_event_type = 'Discharge')
@@ -214,7 +241,7 @@ class ThirtyDayReadmission(CohortBuilder):
         FROM
             inpatient_admits ia
         INNER JOIN
-            `som-nero-phi-jonc101.shc_core.demographic` d
+            `som-nero-phi-jonc101.shc_core_2021.demographic` d
         USING
             (anon_id)
         ),
@@ -235,8 +262,9 @@ class ThirtyDayReadmission(CohortBuilder):
         ORDER BY 
             anon_id, event_time_Admission
 
-        )
+        ),
         -- join back to inpatient_admits to get nearest readmission
+        full_cohort as (
         SELECT
             a.anon_id, a.pat_enc_csn_id_coded observation_id,
             event_time_Discharge index_time,
@@ -258,11 +286,30 @@ class ThirtyDayReadmission(CohortBuilder):
             ia.event_time_jittered_utc > a.event_time_Discharge OR 
             ia.event_time_jittered_utc IS NULL
         AND
-            EXTRACT(YEAR FROM event_time_Discharge) BETWEEN 2015 and 2020
+            EXTRACT(YEAR FROM event_time_Discharge) BETWEEN 2009 and 2021
         GROUP BY
             anon_id, observation_id, index_time
-        ORDER BY
-            anon_id, index_time, next_admit_time
+        ),
+
+        full_cohort_time_window as (
+          SELECT * FROM
+          full_cohort
+          WHERE
+          EXTRACT(YEAR FROM index_time) BETWEEN 2015 and 2020
+        )
+
+        SELECT
+        *
+        FROM
+        (SELECT *,
+                ROW_NUMBER() OVER  (PARTITION BY EXTRACT(YEAR FROM index_time)
+                                    ORDER BY RAND()) AS seqnum
+        FROM 
+            full_cohort_time_window
+        )
+        WHERE
+            seqnum <= 2000
+
         )        
         """
         query_job = self.client.query(query)

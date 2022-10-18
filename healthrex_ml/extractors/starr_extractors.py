@@ -24,7 +24,7 @@ class FlowsheetBinsExtractor():
     """
 
     def __init__(self, cohort_table_id, feature_table_id,
-                 flowsheet_descriptions, look_back_days=3, bins=5,
+                 base_names, look_back_days=3, bins=5,
                  project_id='som-nero-phi-jonc101', dataset='shc_core_2021'):
         """
         Tokenizes flowsheets into bins and then writes or appends to temp
@@ -32,7 +32,7 @@ class FlowsheetBinsExtractor():
         Args:
             cohort_table: name of cohort table -- used to join to features
             temp_dataset: name of temp dataset with cohort table
-            flowsheet_descriptions: list of row_disp_names used for flowsheet
+            base_names: list of row_disp_names used for flowsheet
                 descriptions
             project_id: name of project you are extracting data from
             dataset: name of dataset you are extracting data from
@@ -45,12 +45,12 @@ class FlowsheetBinsExtractor():
         self.look_back_days = look_back_days
         self.project_id = project_id
         self.dataset = dataset
-        self.flowsheet_descriptions = "("
-        for i, flow in enumerate(flowsheet_descriptions):
-            if i == len(flowsheet_descriptions) - 1:
-                self.flowsheet_descriptions += f"'{flow}')"
+        self.base_names = "("
+        for i, flow in enumerate(base_names):
+            if i == len(base_names) - 1:
+                self.base_names += f"'{flow}')"
             else:
-                self.flowsheet_descriptions += f"'{flow}', "
+                self.base_names += f"'{flow}', "
 
     def __call__(self):
         """
@@ -61,7 +61,7 @@ class FlowsheetBinsExtractor():
         SELECT DISTINCT
             labels.observation_id,
             labels.index_time,
-            'Vitals' as feature_type,
+            '{self.__class__.__name__}' as feature_type,
             f.recorded_time_utc as feature_time,
             GENERATE_UUID() as feature_id,
             f.row_disp_name as feature,
@@ -80,7 +80,7 @@ class FlowsheetBinsExtractor():
                           INTERVAL 24*{self.look_back_days} HOUR)
                           >= labels.index_time
         AND
-            f.row_disp_name in {self.flowsheet_descriptions}
+            f.row_disp_name in {self.base_names}
         AND
             f.numerical_val_1 IS NOT NULL
         ),
@@ -119,7 +119,7 @@ class FlowsheetBinsExtractor():
         SELECT DISTINCT
             labels.observation_id,
             labels.index_time,
-            'Vitals' as feature_type,
+            '{self.__class__.__name__}' as feature_type,
             f.recorded_time_utc as feature_time,
             GENERATE_UUID() as feature_id,
             f.row_disp_name as feature,
@@ -138,7 +138,7 @@ class FlowsheetBinsExtractor():
                           INTERVAL 24*{self.look_back_days} HOUR)
                           >= labels.index_time
         AND
-            f.row_disp_name in {self.flowsheet_descriptions}
+            f.row_disp_name in {self.base_names}
         AND
             f.numerical_val_1 IS NOT NULL
         )
@@ -154,7 +154,6 @@ class FlowsheetBinsExtractor():
         """
         df = pd.read_gbq(query)
         return df
-
 
 class LabResultBinsExtractor():
     """
@@ -194,7 +193,7 @@ class LabResultBinsExtractor():
         SELECT DISTINCT
             labels.observation_id,
             labels.index_time,
-            'Lab Results' as feature_type,
+            '{self.__class__.__name__}' as feature_type,
             lr.result_time_utc as feature_time,
             CAST(lr.order_id_coded AS STRING) as feature_id,
             lr.base_name as feature,
@@ -252,7 +251,7 @@ class LabResultBinsExtractor():
         SELECT DISTINCT
             labels.observation_id,
             labels.index_time,
-            'Lab Results' as feature_type,
+            '{self.__class__.__name__}' as feature_type,
             lr.result_time_utc as feature_time,
             CAST(lr.order_id_coded AS STRING) as feature_id,
             lr.base_name as feature,
@@ -288,7 +287,6 @@ class LabResultBinsExtractor():
         df = pd.read_gbq(query)
         return df
 
-
 class MedicationExtractor():
     """
     Defines logic to extract medication orders
@@ -318,7 +316,7 @@ class MedicationExtractor():
         SELECT DISTINCT
             labels.observation_id,
             labels.index_time,
-            'Medications' as feature_type,
+            '{self.__class__.__name__}' as feature_type,
             meds.order_inst_utc as feature_time,
             CAST(meds.order_med_id_coded as STRING) as feature_id,
             meds.med_description as feature,
@@ -370,7 +368,7 @@ class ProcedureExtractor():
         SELECT DISTINCT
             labels.observation_id,
             labels.index_time,
-            'Procedures' as feature_type,
+            '{self.__class__.__name__}' as feature_type,
             op.order_time_jittered_utc as feature_time,
             CAST(op.order_proc_id_coded as STRING) as feature_id,
             op.description as feature,
@@ -425,7 +423,7 @@ class LabOrderExtractor():
         SELECT DISTINCT
             labels.observation_id,
             labels.index_time,
-            'Lab Orders' as feature_type,
+            '{self.__class__.__name__}' as feature_type,
             op.order_time_jittered_utc as feature_time,
             CAST(op.order_proc_id_coded as STRING) as feature_id,
             op.description as feature,
@@ -449,7 +447,6 @@ class LabOrderExtractor():
         query = add_create_or_append_logic(query, self.feature_table_id)
         query_job = self.client.query(query)
         query_job.result()
-
 
 class PatientProblemExtractor():
     """
@@ -478,7 +475,7 @@ class PatientProblemExtractor():
         SELECT
             labels.observation_id,
             labels.index_time,
-            'Diagnoses' as feature_type,
+            '{self.__class__.__name__}' as feature_type,
             CAST(dx.start_date_utc as TIMESTAMP) as feature_time,
             GENERATE_UUID() as feature_id,
             dx.icd10 as feature,
@@ -498,7 +495,6 @@ class PatientProblemExtractor():
         query = add_create_or_append_logic(query, self.feature_table_id)
         query_job = self.client.query(query)
         query_job.result()
-
 
 class SexExtractor():
     """
@@ -527,7 +523,7 @@ class SexExtractor():
         SELECT DISTINCT
             labels.observation_id,
             labels.index_time,
-            'Demographics' as feature_type,
+            '{self.__class__.__name__}' as feature_type,
             labels.index_time as feature_time,
             GENERATE_UUID() as feature_id,
             CASE WHEN demo.GENDER is NULL then 'sex_missing'
@@ -544,7 +540,6 @@ class SexExtractor():
         query = add_create_or_append_logic(query, self.feature_table_id)
         query_job = self.client.query(query)
         query_job.result()
-
 
 class RaceExtractor():
     """
@@ -573,7 +568,7 @@ class RaceExtractor():
         SELECT DISTINCT
             labels.observation_id,
             labels.index_time,
-            'Demographics' as feature_type,
+            '{self.__class__.__name__}' as feature_type,
             labels.index_time as feature_time,
             GENERATE_UUID() as feature_id,
             CASE WHEN demo.CANONICAL_RACE is NULL then 'race_missing'
@@ -590,7 +585,6 @@ class RaceExtractor():
         query = add_create_or_append_logic(query, self.feature_table_id)
         query_job = self.client.query(query)
         query_job.result()
-
 
 class AgeExtractor():
     """
@@ -621,7 +615,7 @@ class AgeExtractor():
         SELECT DISTINCT
             labels.observation_id,
             labels.index_time,
-            'Demographics' as feature_type,
+            '{self.__class__.__name__}' as feature_type,
             labels.index_time as feature_time,
             GENERATE_UUID() as feature_id,
             'Age' as feature,
@@ -670,7 +664,7 @@ class AgeExtractor():
         SELECT DISTINCT
             labels.observation_id,
             labels.index_time,
-            'Demographics' as feature_type,
+            '{self.__class__.__name__}' as feature_type,
             labels.index_time as feature_time,
             GENERATE_UUID() as feature_id,
             'Age' as feature,

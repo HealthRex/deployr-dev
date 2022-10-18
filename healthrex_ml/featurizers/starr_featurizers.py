@@ -242,14 +242,19 @@ class BagOfWordsFeaturizer():
     as in implementation below. 
     """
 
-    def __init__(self, cohort_table_id, feature_table_id, outpath='./features',
+    def __init__(self, cohort_table_id, feature_table_id, extractors,
+                 train_years=None, test_years=None, outpath='./features',
                  project='som-nero-phi-jonc101', dataset='shc_core_2021',
-                 feature_config=None, tfidf=True):
+                 feature_config=None, tfidf=True, from_table=False):
         """
         Args:
             cohort_table_id: ex 'mining-clinical-decisions.conor_db.table_name'
             feature_table_id: ex 
                 'mining-clinical-decisions.conor_db.feature_table'
+            extractors: list of extractors to pull data from. 
+            train_years, test_years : each none by default. If list,
+                then specifies which years to include in train, val, test split.
+                If none, last year used as test set. 
             outpath: path to dump feature matrices
             project: bq project id to extract data from
             dataset: bq dataset with project to extract data from
@@ -257,13 +262,18 @@ class BagOfWordsFeaturizer():
                 windows. 
             tfidf: if true apply a tfidf transform, train on train apply on
                 test
+            from_table: default False. If true no feature extraction occurs, 
+                sparse matrices created with feature types specified by list of
+                extractors 
         """
         self.cohort_table_id = cohort_table_id
         self.feature_table_id = feature_table_id
+        self.extractors = extractors
         self.outpath = outpath
         self.project = project
         self.dataset = dataset
         self.tfidf = tfidf
+        self.from_table = from_table
         if feature_config is None:
             self.feature_config = DEFAULT_DEPLOY_CONFIG
         else:
@@ -277,8 +287,14 @@ class BagOfWordsFeaturizer():
                 {self.cohort_table_id}
         """
         df = pd.read_gbq(split_query).sort_values('year')
-        self.train_years = df.year.values[:-1]
-        self.test_years = [df.year.values[-1]]
+        if train_years is None:
+            self.train_years = df.year.values[:-1]
+        else:
+            self.train_years = train_years
+        if test_years is None:
+            self.test_years = [df.year.values[-1]]
+        else:
+            self.test_years = test_years
         self.replace_table = True
 
     def __call__(self):
@@ -286,13 +302,19 @@ class BagOfWordsFeaturizer():
         Executes all logic to construct features and labels and saves all info
         user specified working directory.
         """
-        self.construct_feature_timeline()
-        self.construct_bag_of_words_rep()
+        if not self.from_table:
+            self.construct_feature_timeline()
+            self.construct_bag_of_words_rep()
+        else:
+            self.lups = []
+        feature_types = [f"'{ext.__class__.__name__}'" for ext in self.extractors]
         query = f"""
         SELECT
             *
         FROM
             {self.feature_table_id}_bow
+        WHERE
+            feature_type in ({','.join(feature_types)})
         ORDER BY
             observation_id
         """
@@ -374,79 +396,12 @@ class BagOfWordsFeaturizer():
 
     def construct_feature_timeline(self):
         """
-        Executes all logic to iteratively append rows to the biq query long form
-        feature matrix destination table.  Does this by iteratively joining
-        cohort table to tables with desired features, filtering for events
-        that occur within each look up range, and then transforming into bag of
-        words style representations.  Features with numerical values are binned
-        into buckets to enable bag of words repsesentation. 
+        Calls extractors to create long form feature timeline
         """
-        fextractors = []
-        # Get categorical features
-        if 'Sex' in self.feature_config['Categorical']:
-            se = extractors.SexExtractor(
-                self.cohort_table_id, self.feature_table_id)
-            fextractors.append(se)
-        if 'Race' in self.feature_config['Categorical']:
-            re = extractors.RaceExtractor(self.cohort_table_id,
-                                           self.feature_table_id)
-            fextractors.append(re)
-        if 'Diagnoses' in self.feature_config['Categorical']:
-            pe = extractors.PatientProblemExtractor(
-                self.cohort_table_id, self.feature_table_id)
-            fextractors.append(pe)
-
-        if 'Medications' in self.feature_config['Categorical']:
-            me = extractors.MedicationExtractor(
-                self.cohort_table_id, self.feature_table_id,
-                    look_back_days=self.feature_config['Categorical'
-                    ]['Medications'][0]['look_back'])
-            fextractors.append(me)
-
-        if 'Procedures' in self.feature_config['Categorical']:
-            pre = extractors.ProcedureExtractor(
-                self.cohort_table_id, self.feature_table_id,
-                look_back_days=self.feature_config['Categorical'
-                    ]['Procedures'][0]['look_back'])
-            fextractors.append(pre)
-
-        if 'Lab Orders' in self.feature_config['Categorical']:
-            lo = extractors.LabOrderExtractor(
-                self.cohort_table_id, self.feature_table_id,
-                look_back_days=self.feature_config['Categorical'
-                    ]['Lab Orders'][0]['look_back'])
-            fextractors.append(lo)
-
-        # Get numerical features
-        if 'Age' in self.feature_config['Numerical']:
-            ae = extractors.AgeExtractor(
-                self.cohort_table_id,
-                self.feature_table_id,
-                bins=self.feature_config['Numerical']['Age'][0]['num_bins'])
-            fextractors.append(ae)
-        if 'LabResults' in self.feature_config['Numerical']:
-            lre = extractors.LabResultBinsExtractor(self.cohort_table_id,
-                                                    self.feature_table_id,
-                                                    bins=self.feature_config['Numerical']
-                                                    ['LabResults'][0]['num_bins'],
-                                                    look_back_days=self.feature_config['Numerical']
-                                                    ['LabResults'][0]['look_back'],
-                                                    base_names=DEFAULT_LAB_COMPONENT_IDS)
-            fextractors.append(lre)
-        if 'Vitals' in self.feature_config['Numerical']:
-            fbe = extractors.FlowsheetBinsExtractor(
-                self.cohort_table_id,
-                self.feature_table_id,
-                look_back_days=self.feature_config['Numerical']
-                    ['Vitals'][0]['look_back'],
-                bins=self.feature_config['Numerical']['Vitals'][0]['num_bins'],
-                flowsheet_descriptions=DEFAULT_FLOWSHEET_FEATURES)
-            fextractors.append(fbe)
-
         # Call extractors and collect any look up tables
         self.lups = []
-        for extractor in tqdm(fextractors):
-            self.lups.append(extractor())
+        for ext in tqdm(self.extractors):
+            self.lups.append(ext())
 
     def construct_bag_of_words_rep(self):
         """
