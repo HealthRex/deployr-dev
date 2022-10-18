@@ -51,6 +51,13 @@ DEFAULT_LAB_COMPONENT_IDS = [
 DEFAULT_FLOWSHEET_FEATURES = [
     "Heart Rate",
     "Temp",
+    'N2O',
+    "ETCO2",
+    "O2",
+    "Resp Rate",
+    "FiO2",
+    "Pulse",
+    "VO2",
     "Resp",
     "SpO2",
     'BP_High_Systolic',

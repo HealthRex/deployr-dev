@@ -38,7 +38,7 @@ parser.add_argument(
 parser.add_argument(
     '--extractors',
     nargs='+',
-    default=['AgeExtractor', 'RaceExtractor',
+    default=['AgeExtractor', 'RaceExtractor', 'EthnicityExtractor',
              'SexExtractor', 'PatientProblemExtractor', 
              'LabOrderExtractor', 'ProcedureExtractor',
              'MedicationExtractor', 'LabResultBinsExtractor',
@@ -112,6 +112,11 @@ if 'RaceExtractor' in args.extractors:
     ))
 if 'SexExtractor' in args.extractors:
     extractors.append(SexExtractor(
+        cohort_table_id=cohort_table_id,
+        feature_table_id=feature_table_id
+    ))
+if 'EthnicityExtractor' in args.extractors:
+    extractors.append(EthnicityExtractor(
         cohort_table_id=cohort_table_id,
         feature_table_id=feature_table_id
     ))
