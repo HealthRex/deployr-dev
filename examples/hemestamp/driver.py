@@ -3,8 +3,6 @@ Driver to train a hemestamp model
 ex: python driver.py --featurize --train
 """
 
-
-# Authenticate to gcp project [TODO -- change to point to your credentials file]
 import argparse
 from google.cloud import bigquery
 import json
@@ -15,6 +13,8 @@ from healthrex_ml.cohorts import *
 from healthrex_ml.trainers import *
 from healthrex_ml.featurizers import *
 from healthrex_ml.extractors import *
+
+# Needs to point to your own application credentials
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = (
     '/Users/conorcorbin/.config/gcloud/application_default_credentials.json'
 )
