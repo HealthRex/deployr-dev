@@ -13,6 +13,7 @@ from healthrex_ml.cohorts import *
 from healthrex_ml.trainers import *
 from healthrex_ml.featurizers import *
 from healthrex_ml.extractors import *
+from healthrex_ml.evaluators import BinaryEvaluator
 
 # Needs to point to your own application credentials
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = (
@@ -154,3 +155,11 @@ if args.train:
         working_dir=f"./{args.experiment_name}_hemestamp_{args.outpath}"
     )
     trainer(task='label_hemestamp')
+
+# Evaluate model
+yhats_path = os.path.join(f"./{args.experiment_name}_hemestamp_{args.outpath}",
+                          'label_hemestamp_yhats.csv')
+df_test = pd.read_csv(yhats_path)
+evalr = BinaryEvaluator(
+    outdir=f"./{args.experiment_name}_hemestamp_{args.outpath}")
+evalr(df_test.labels, df_test.predictions)
