@@ -1,25 +1,24 @@
-"""
-Defines a series a suite of classes that evaluate performance of silently
-deployed models. Base class is BinaryEvaluator.  
-"""
+from tqdm import tqdm
 import json
 import matplotlib.pyplot as plt
 import numpy as np
 import os
 import pandas as pd
 import seaborn as sns
-from sklearn.metrics  import (
-    precision_score,
-    recall_score,
-    accuracy_score,
-    average_precision_score,
-    precision_recall_curve,
-    roc_auc_score,
-    roc_curve
-)
+from sklearn.metrics import (precision_score,
+                             recall_score,
+                             accuracy_score,
+                             average_precision_score,
+                             precision_recall_curve,
+                             roc_auc_score,
+                             roc_curve
+                             )
 
 sns.set_theme(style='whitegrid', font_scale=2.0)
+
+
 THRESHOLD_DEPENDENT = ['accuracy_score', 'recall_score', 'precision_score']
+
 
 class BinaryEvaluator:
 
@@ -33,6 +32,7 @@ class BinaryEvaluator:
             'AUROC': roc_auc_score,
             'Average precision': average_precision_score
         }
+        os.makedirs(outdir, exist_ok=True)
 
     def __call__(self, labels, predictions):
         """
@@ -201,6 +201,7 @@ class BinaryEvaluator:
         labels = np.asarray(labels)
         inds = [i for i in range(len(predictions))]
         values = {}
+        actual_values = {}
         for i in range(iters):
             inds_b = np.random.choice(inds, size=len(inds), replace=True)
             l_b, p_b = labels[inds_b], predictions[inds_b]
@@ -218,18 +219,16 @@ class BinaryEvaluator:
         for m in metrics:
             if metrics[m].__name__ in THRESHOLD_DEPENDENT:
                 if m == 'Specificity':
-                    values.setdefault(m, []).append(
-                        metrics[m](labels, predicted_labels, pos_label=0))
+                    actual_values[m] = metrics[m](
+                        labels, predicted_labels, pos_label=0)
                 else:
-                    values.setdefault(m, []).append(
-                        metrics[m](labels, predicted_labels))
+                    actual_values[m] = metrics[m](labels, predicted_labels)
             else:
-                values.setdefault(m, []).append(
-                    metrics[m](labels, predictions))
+                actual_values[m] = metrics[m](labels, predictions)
 
         results = {}
         for v in values:
-            mean = '{:.2f}'.format(round(np.mean(values[v]), 2))
+            mean = '{:.2f}'.format(round(actual_values[v], 2))
             upper = '{:.2f}'.format(round(np.percentile(values[v], 97.5), 2))
             lower = '{:.2f}'.format(round(np.percentile(values[v], 2.5), 2))
             results[v] = f"{mean} [{lower}, {upper}]"
