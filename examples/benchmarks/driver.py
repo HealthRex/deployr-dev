@@ -16,7 +16,6 @@ from healthrex_ml.trainers import *
 from healthrex_ml.featurizers import *
 from healthrex_ml.extractors import *
 
-
 # Authenticate to gcp project [TODO -- change to point to your credentials file]
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = (
     '/Users/conorcorbin/.config/gcloud/application_default_credentials.json'
@@ -27,7 +26,7 @@ client = bigquery.Client()
 parser = argparse.ArgumentParser(description='Build cohorts, featurize, train')
 parser.add_argument(
     '--experiment_name',
-    default='20221017',
+    default='20221110',
     help='Experiment name, prefix of all saved tables'
 )
 parser.add_argument(
@@ -152,6 +151,12 @@ if 'FlowsheetBinsExtractor' in args.extractors:
         feature_table_id=feature_table_id,
         base_names=DEFAULT_FLOWSHEET_FEATURES
     ))
+
+# Add dummy extractor -- needed for case when no feature exists for observation
+extractors.append(DummyExtractor(
+    cohort_table_id=cohort_table_id,
+    feature_table_id=feature_table_id,
+))
 
 if args.build_cohort:
     c = cohort_builders[args.cohort](

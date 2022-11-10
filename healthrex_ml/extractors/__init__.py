@@ -9,6 +9,7 @@ from healthrex_ml.extractors.starr_extractors import (
     EthnicityExtractor,
     ProcedureExtractor,
     LabOrderExtractor,
+    DummyExtractor,
     table_exists,
     add_create_or_append_logic,
     REPLACE_TABLE
