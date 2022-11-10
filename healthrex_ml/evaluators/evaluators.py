@@ -9,18 +9,20 @@ import numpy as np
 import os
 import pandas as pd
 import seaborn as sns
-from sklearn.metrics  import (
-    precision_score,
-    recall_score,
-    accuracy_score,
-    average_precision_score,
-    precision_recall_curve,
-    roc_auc_score,
-    roc_curve
-)
+from sklearn.metrics import (precision_score,
+                             recall_score,
+                             accuracy_score,
+                             average_precision_score,
+                             precision_recall_curve,
+                             roc_auc_score,
+                             roc_curve
+                             )
 
 sns.set_theme(style='whitegrid', font_scale=2.0)
+
+
 THRESHOLD_DEPENDENT = ['accuracy_score', 'recall_score', 'precision_score']
+
 
 class BinaryEvaluator:
 
@@ -221,11 +223,13 @@ class BinaryEvaluator:
         for m in metrics:
             if metrics[m].__name__ in THRESHOLD_DEPENDENT:
                 if m == 'Specificity':
-                    actual_values[m] = metrics[m](labels, predicted_labels, pos_label=0)
+                    actual_values[m] = metrics[m](
+                        labels, predicted_labels, pos_label=0)
                 else:
                     actual_values[m] = metrics[m](labels, predicted_labels)
             else:
                 actual_values[m] = metrics[m](labels, predictions)
+
         results = {}
         for v in values:
             mean = '{:.2f}'.format(round(actual_values[v], 2))

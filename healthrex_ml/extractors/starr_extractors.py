@@ -631,7 +631,6 @@ class EthnicityExtractor():
         query_job = self.client.query(query)
         query_job.result()
 
-
 class AgeExtractor():
     """
     Defines logic to extract age as feature from dataset
@@ -738,6 +737,45 @@ class AgeExtractor():
         df = pd.read_gbq(query)
         return df
 
+
+class DummyExtractor():
+    """
+    Add feature value of 1 for dummy feature for every patient
+    """
+
+    def __init__(self, cohort_table_id, feature_table_id,
+                 project_id='som-nero-phi-jonc101', dataset='shc_core_2021'):
+        """
+        Args:
+            cohort_table: name of cohort table -- used to join to features
+            project_id: name of project you are extracting data from
+            dataset: name of dataset you are extracting data from
+        """
+        self.cohort_table_id = cohort_table_id
+        self.feature_table_id = feature_table_id
+        self.client = bigquery.Client()
+        self.project_id = project_id
+        self.dataset = dataset
+
+    def __call__(self):
+        """
+        Executes queries and returns all 
+        """
+        query = f"""
+        SELECT DISTINCT
+            labels.observation_id,
+            labels.index_time,
+            '{self.__class__.__name__}' as feature_type,
+            labels.index_time as feature_time,
+            GENERATE_UUID() as feature_id,
+            "DummyFeature" as feature,
+            1 value
+        FROM
+            {self.cohort_table_id} labels
+        """
+        query = add_create_or_append_logic(query, self.feature_table_id)
+        query_job = self.client.query(query)
+        query_job.result()
 
 def table_exists(feature_table_id):
     """
