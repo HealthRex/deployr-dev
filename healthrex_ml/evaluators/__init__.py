@@ -1,1 +1,1 @@
-from healthrex_ml.evaluators.evaluators import BinaryEvaluator
+from healthrex_ml.evaluators.evaluators import BinaryEvaluator, BinaryEvaluatorByTime

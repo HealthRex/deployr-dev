@@ -2,6 +2,7 @@
 Defines a series a suite of classes that evaluate performance of silently
 deployed models. Base class is BinaryEvaluator.  
 """
+from tqdm import tqdm
 import json
 import matplotlib.pyplot as plt
 import numpy as np
@@ -33,6 +34,7 @@ class BinaryEvaluator:
             'AUROC': roc_auc_score,
             'Average precision': average_precision_score
         }
+        os.makedirs(outdir, exist_ok=True)
 
     def __call__(self, labels, predictions):
         """
@@ -201,6 +203,7 @@ class BinaryEvaluator:
         labels = np.asarray(labels)
         inds = [i for i in range(len(predictions))]
         values = {}
+        actual_values = {}
         for i in range(iters):
             inds_b = np.random.choice(inds, size=len(inds), replace=True)
             l_b, p_b = labels[inds_b], predictions[inds_b]
@@ -218,20 +221,121 @@ class BinaryEvaluator:
         for m in metrics:
             if metrics[m].__name__ in THRESHOLD_DEPENDENT:
                 if m == 'Specificity':
-                    values.setdefault(m, []).append(
-                        metrics[m](labels, predicted_labels, pos_label=0))
+                    actual_values[m] = metrics[m](labels, predicted_labels, pos_label=0)
                 else:
-                    values.setdefault(m, []).append(
-                        metrics[m](labels, predicted_labels))
+                    actual_values[m] = metrics[m](labels, predicted_labels)
             else:
-                values.setdefault(m, []).append(
-                    metrics[m](labels, predictions))
-
+                actual_values[m] = metrics[m](labels, predictions)
         results = {}
         for v in values:
-            mean = '{:.2f}'.format(round(np.mean(values[v]), 2))
+            mean = '{:.2f}'.format(round(actual_values[v], 2))
             upper = '{:.2f}'.format(round(np.percentile(values[v], 97.5), 2))
             lower = '{:.2f}'.format(round(np.percentile(values[v], 2.5), 2))
             results[v] = f"{mean} [{lower}, {upper}]"
 
         return results
+
+class BinaryEvaluatorByTime(BinaryEvaluator):
+    def __init__(self, outdir):
+        self.outdir = outdir
+        self.metrics = {
+            # 'Accuracy': accuracy_score,
+            # 'Sensitivity': recall_score,
+            # 'Specificity': recall_score,
+            # 'Precision': precision_score,
+            'AUROC': roc_auc_score,
+            # 'Average precision': average_precision_score
+        }
+    def __call__(self, labels, predictions, index_times):
+        """
+        Override in child classes to include functionality to pull labels and
+        predictions from some outside source (ex: cosmos db)
+        """
+        self.get_performance_artifacts_by_time(labels=labels, predictions=predictions, index_times=index_times)
+
+    def get_performance_artifacts_by_time(self, labels, predictions, index_times):
+        #Get years
+        years = index_times.dt.year
+        years_in_test = list(set(years))
+        years_in_test.sort()
+        inds = [i for i in range(len(years))]
+
+        #Group by year
+        labels_in_year = {}
+        preds_in_year = {}
+        for year in years_in_test:
+            year_idx_mask = [1 if years.iloc[i] == year else 0 for i in range(len(years))]
+            labels_in_year[year] = []
+            preds_in_year[year] = []
+            for i in range(len(year_idx_mask)):
+                if year_idx_mask[i] == 1:
+                    labels_in_year[year].append(labels.iloc[i])
+                    preds_in_year[year].append(predictions.iloc[i])
+                assert len(labels_in_year) == len(preds_in_year)
+
+        # Bootstrap metric by time
+        results_by_year = {}
+        for year in years_in_test:
+            result = self.bootstrap_metric(labels_in_year[year], preds_in_year[year], self.metrics)
+            results_by_year[year] = result
+
+        with open(os.path.join(self.outdir, "auc_ci.json"), "w") as fp:
+            json.dump(results_by_year, fp)
+
+        fig, ax = plt.subplots(nrows=1, ncols=1)
+
+        # Plot AUC By Year
+        self.plot_auc_by_year(labels_in_year, preds_in_year, results_by_year, title="AUC By Year", ax=ax)
+        plt.savefig(os.path.join(self.outdir, 'auc_by_year.png'),
+                    bbox_inches='tight',
+                    dpi=300)
+
+    def plot_auc_by_year(self, labels_by_year, preds_by_year, bootstrap_by_year, title, ax, color='black'):
+        years = list(labels_by_year.keys())
+        years.sort()
+
+        aucs = []
+        lower_vals = []
+        upper_vals = []     
+        for year in years:
+            #Get AUC score
+            auc_in_year = roc_auc_score(labels_by_year[year], preds_by_year[year])
+            aucs.append(auc_in_year)
+            #Get CIs
+            errors = bootstrap_by_year[year]['AUROC']
+            l_index = errors.index("[")
+            r_index = errors.index("]")
+            lower = float(errors[l_index + 1: l_index + 5])
+            upper = float(errors[r_index - 4: r_index])
+            lower_vals.append(lower)
+            upper_vals.append(upper)
+        ax.plot(
+            years,
+            aucs,
+            color=color,
+            lw=2.0,
+            label=f"Max AUC: {max(aucs):.2f}\nMin AUC: {min(aucs):.2f}"
+        )
+        errors = np.stack([np.subtract(aucs,lower_vals), np.subtract(upper_vals, aucs)])
+        ax.errorbar(
+            years,
+            aucs, 
+            yerr = errors,
+            color=color
+        )
+        ax.set_ylim([0.0, 1.05])
+        ax.set_xlabel("Year")
+        ax.set_ylabel("AUC")
+        ax.set_title(title)
+        leg = ax.legend(loc="lower right", handlelength=0, handletextpad=0, fancybox=True)
+        for item in leg.legendHandles:
+            item.set_visible(False)
+        max_auc = max(aucs)
+        max_drop = max(aucs) - min(aucs)
+        
+        #Save values
+        values = {}
+        values['max_auc'] = max(aucs)
+        values['max_drop'] = max(aucs) - min(aucs)
+        with open(os.path.join(self.outdir, "auc_max.json"), 'w') as fp:
+            json.dump(values, fp)

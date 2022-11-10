@@ -6,20 +6,25 @@ Example driver.py to train and evaluate three benchmark tasks
 """
 
 import argparse
+from msilib.schema import Binary
 from google.cloud import bigquery
 import os
 import pandas as pd
 import sys
+sys.path.append("C:\\Users\\Raphael\\Downloads\\repos\\healthrex_ml")
+
 
 from healthrex_ml.cohorts import *
 from healthrex_ml.trainers import *
 from healthrex_ml.featurizers import *
 from healthrex_ml.extractors import *
+from healthrex_ml.evaluators import BinaryEvaluator, BinaryEvaluatorByTime
 
+DATASET_NAME = "raphael_honors"
 
 # Authenticate to gcp project [TODO -- change to point to your credentials file]
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = (
-    '/Users/conorcorbin/.config/gcloud/application_default_credentials.json'
+    'C:\\Users\\Raphael\\AppData\\Roaming\\gcloud\\application_default_credentials.json'
 )
 os.environ['GCLOUD_PROJECT'] = 'som-nero-phi-jonc101'
 client = bigquery.Client()
@@ -80,9 +85,32 @@ parser.add_argument(
     action='store_true',
     help='Whether to train models'
 )
+parser.add_argument(
+    '--train_years',
+    type=int,
+    nargs='+',
+    default=[2009, 2010, 2011, 2012, 2013, 2014, 2015],
+    help="What years between 2009 and 2021 to use as the training set"
+)
+parser.add_argument(
+    '--evaluate',
+    action='store_true',
+    help='Whether to evaluate the models on the test set'
+)
+parser.add_argument(
+    '--evaluator',
+    default='BinaryEvaluator',
+    help='Which type of evaluator to use'
+)
+parser.add_argument(
+    '--config',
+    default='Default',
+    help='Which feature config to use (changes feature window)'
+)
+
 args = parser.parse_args()
 
-# Create dictionary of cohorts, featurizers and trainers
+# Create dictionary of cohorts, featurizers, feature configs, and trainers
 cohort_builders = {
     'InpatientMortalityCohort': InpatientMortalityCohort,
     'LongLengthOfStayCohort': LongLengthOfStayCohort,
@@ -91,12 +119,20 @@ cohort_builders = {
 featurizers = {
     'BagOfWordsFeaturizer': BagOfWordsFeaturizer,
 }
+feature_configs = {
+    'Extended': EXTENDED_DEPLOY_CONFIG,
+    'Default': DEFAULT_DEPLOY_CONFIG
+}
 trainers = {
     'LightGBMTrainer': LightGBMTrainer,
 }
+evaluators = {
+    'BinaryEvaluator': BinaryEvaluator,
+    'BinaryEvaluatorByTime': BinaryEvaluatorByTime
+}
 
-cohort_table_id = f"mining-clinical-decisions.benchmarking.{args.experiment_name}_{args.cohort}"
-feature_table_id = f"mining-clinical-decisions.benchmarking.{args.experiment_name}_{args.cohort}_features"
+cohort_table_id = f"mining-clinical-decisions.{DATASET_NAME}.{args.experiment_name}_{args.cohort}"
+feature_table_id = f"mining-clinical-decisions.{DATASET_NAME}.{args.experiment_name}_{args.cohort}_features"
 
 # Create list of extactors
 extractors = []
@@ -154,9 +190,10 @@ if 'FlowsheetBinsExtractor' in args.extractors:
     ))
 
 if args.build_cohort:
+    print("Building cohort...")
     c = cohort_builders[args.cohort](
         client=client,
-        dataset_name='benchmarking',
+        dataset_name=DATASET_NAME,
         table_name=f"{args.experiment_name}_{args.cohort}")
     c()
 
@@ -166,20 +203,41 @@ else:
     from_table = True
 
 if args.featurize:
+    print("Featurizing...")
+    #Set train_years and test_years
+    all_years = [i for i in range(2009, 2022)]
+    train_years = args.train_years
+    test_years = [year for year in all_years if year not in train_years]
     featurizer = featurizers[args.featurizer](
         cohort_table_id=cohort_table_id,
         feature_table_id=feature_table_id,
         extractors=extractors,
-        train_years=[2009, 2010, 2011, 2012, 2013, 2014, 2015],
-        test_years=[2016, 2017, 2018, 2019, 2020, 2021],
+        train_years=train_years,
+        test_years=test_years,
         outpath=f"./{args.experiment_name}_{args.cohort}_{args.outpath}",
+        feature_config = feature_configs[args.config],
         tfidf=True,
         from_table=from_table
     )
     featurizer()
 
 if args.train:
+    print("Training...")
     trainer = trainers[args.trainer](
         working_dir=f"./{args.experiment_name}_{args.cohort}_{args.outpath}"
     )
     trainer(task='label')
+
+if args.evaluate:
+    print("Evaluating...")
+    evalr = evaluators[args.evaluator](
+        outdir = f"./{args.experiment_name}_{args.cohort}_{args.outpath}")
+
+    yhats_path = os.path.join(f"./{args.experiment_name}_{args.cohort}_{args.outpath}",
+                            'label_yhats.csv')
+    df_test = pd.read_csv(yhats_path)
+    if args.evaluator == "BinaryEvaluator":
+        evalr(df_test.labels, df_test.predictions)
+    elif args.evaluator == "BinaryEvaluatorByTime":
+        df_test.index_time = df_test.index_time.astype('datetime64')
+        evalr(df_test.labels, df_test.predictions, df_test.index_time)

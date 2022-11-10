@@ -96,6 +96,7 @@ class LightGBMTrainer():
 
         df_yhats = pd.DataFrame(data={
             'observation_id' : y_test['observation_id'].values,
+            'index_time' : y_test['index_time'].values, #CHECK IF THIS WORKS
             'labels': y_test[self.task].values,
             'predictions': predictions
         })
