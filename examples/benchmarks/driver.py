@@ -6,13 +6,11 @@ Example driver.py to train and evaluate three benchmark tasks
 """
 
 import argparse
-from msilib.schema import Binary
+# from msilib.schema import Binary
 from google.cloud import bigquery
 import os
 import pandas as pd
 import sys
-sys.path.append("C:\\Users\\Raphael\\Downloads\\repos\\healthrex_ml")
-
 
 from healthrex_ml.cohorts import *
 from healthrex_ml.trainers import *
@@ -24,7 +22,8 @@ DATASET_NAME = "raphael_honors"
 
 # Authenticate to gcp project [TODO -- change to point to your credentials file]
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = (
-    'C:\\Users\\Raphael\\AppData\\Roaming\\gcloud\\application_default_credentials.json'
+    #'C:\\Users\\Raphael\\AppData\\Roaming\\gcloud\\application_default_credentials.json' #On Local
+    '/home/Raphael/.config/gcloud/application_default_credentials.json'                   #On cloud instance
 )
 os.environ['GCLOUD_PROJECT'] = 'som-nero-phi-jonc101'
 client = bigquery.Client()
@@ -32,7 +31,7 @@ client = bigquery.Client()
 parser = argparse.ArgumentParser(description='Build cohorts, featurize, train')
 parser.add_argument(
     '--experiment_name',
-    default='20221110',
+    default='20221115',
     help='Experiment name, prefix of all saved tables'
 )
 parser.add_argument(
