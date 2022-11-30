@@ -38,16 +38,20 @@ with open("./index_num.json", "w") as f:
 
 # Set up commands
 commands = []
+date = "20221130"
+cohort = "ThirtyDayReadmission"
+cohort_abv = "readmit"
 for index, subset in index_str.items():
-    subset_command = "python driver.py --cohort ThirtyDayReadmission " + \
+    subset_command = f"python driver.py --cohort {cohort} " + \
     "--featurize --train --evaluate --evaluator BinaryEvaluatorByTime "
-    subset_command += f"--outpath ./20221115__subset{index} "
-    subset_command += f"--experiment_name 20221115_readmit "
+    subset_command += f"--outpath ./{date}_{cohort_abv}_subset{index} "
+    subset_command += f"--experiment_name {date}_{cohort_abv} "
     extractors_str = "--extractors " + ' '.join(subset)
     subset_command += extractors_str
-    subset_command += f" > ./log/20221115_readmit_subset{index} 2>> ./log/20221115_readmit_subset{index} &"
+    subset_command += f" > ./log/{date}_{cohort_abv}_subset{index} 2>> ./log/{date}_{cohort_abv}_subset{index} &"
     commands.append(subset_command)
 
 #Execute the commands
 for i in range(len(commands)):
     os.system(commands[i])
+
