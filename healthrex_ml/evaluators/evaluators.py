@@ -339,6 +339,7 @@ class BinaryEvaluatorByTime(BinaryEvaluator):
         
         #Save values
         values = {}
+        values['init_auc'] = aucs[0]
         values['max_auc'] = max(aucs)
         values['max_drop'] = max(aucs) - min(aucs)
         with open(os.path.join(self.outdir, "auc_max.json"), 'w') as fp:
