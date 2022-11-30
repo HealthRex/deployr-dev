@@ -18,6 +18,7 @@ def readDataFromDirectory(dirname, experiment_name):
     extractors += [index_str[str(i)] for i in range(127)]
  
     #Start reading in data from the dictionaries
+    init_auroc = [0]
     max_auroc = [0]
     max_drop = [0]
     for i in range(127):
@@ -27,11 +28,13 @@ def readDataFromDirectory(dirname, experiment_name):
         with open(filename) as f:
             subset_dict = json.load(f)
         #2. Populate the max_auroc and max_drop lists
+        init_auroc.append(subset_dict["init_auc"])
         max_auroc.append(subset_dict["max_auc"])
         max_drop.append(subset_dict["max_drop"])
     df_dict = {'Index': [i for i in range(128)],
                'Cohort': cohorts,
                'Extractors': extractors,
+               'Initial AUROC': init_auroc,
                'Max AUROC': max_auroc,
                'Max Drop': max_drop}
     df = pd.DataFrame(data=df_dict)
