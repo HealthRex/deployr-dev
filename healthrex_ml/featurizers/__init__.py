@@ -8,3 +8,5 @@ from healthrex_ml.featurizers.starr_featurizers import (
     SequenceFeaturizer,
     BagOfWordsFeaturizer
 )
+
+from healthrex_ml.extractors.starr_extractors import *

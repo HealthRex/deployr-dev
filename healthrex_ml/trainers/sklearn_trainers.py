@@ -196,7 +196,7 @@ class BaselineModelTrainer():
         df_yhats.to_csv(os.path.join(self.working_dir, yhats_path), index=None)
         self.generate_deploy_config()
 
-    def generate_deploy_config(self, tfidf=True):
+    def generate_deploy_config(self):
         """
         Generates the config file used by the deployment module.  Contains
         all information needed for deployment module to create feature vectors
@@ -224,6 +224,16 @@ class BaselineModelTrainer():
         deploy['feature_config'] = feature_config
         deploy['lab_base_names'] = DEFAULT_LAB_COMPONENT_IDS
         deploy['vital_base_names'] = DEFAULT_FLOWSHEET_FEATURES
+
+        # TFIDF transform
+        transform_path = os.path.join(self.working_dir, 'tfidf_transform.pkl')
+        if os.path.exists(transform_path):
+            with open(transform_path, 'rb') as f:
+                transform = pickle.load(f)
+        else:
+            transform = None
+        deploy['transform'] = transform
+
         with open(os.path.join(self.working_dir, f'{self.task}_deploy.pkl'),
                   'wb') as w:
             pickle.dump(deploy, w)

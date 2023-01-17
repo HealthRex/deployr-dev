@@ -190,7 +190,7 @@ class LongLengthOfStayCohort(CohortBuilder):
             full_cohort 
         )
         WHERE
-            seqnum <= 2000
+            seqnum <= 10000
 
         )
         """
@@ -550,7 +550,7 @@ class CBCWithDifferentialCohort(CohortBuilder):
             FROM cohort_wide 
             ) 
         WHERE
-            seqnum <= 10000
+            seqnum <= 2000
         )
         
         """
@@ -637,7 +637,7 @@ class MetabolicComprehensiveCohort(CohortBuilder):
             FROM cohort_wide 
             ) 
         WHERE
-            seqnum <= 10000
+            seqnum <= 2000
         )
         """
         query_job = self.client.query(query)
@@ -711,7 +711,7 @@ class Hematocrit(CohortBuilder):
             FROM cohort_wide 
             ) 
         WHERE
-            seqnum <= 10000
+            seqnum <= 2000
         )
         
         """
@@ -1010,7 +1010,7 @@ class MagnesiumCohort(CohortBuilder):
             FROM cohort_wide 
             ) 
         WHERE
-            seqnum <= 10000
+            seqnum <= 2000
         )
         
         """

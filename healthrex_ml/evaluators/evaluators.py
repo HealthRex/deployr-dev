@@ -5,6 +5,7 @@ import numpy as np
 import os
 import pandas as pd
 import seaborn as sns
+from glob import glob
 from sklearn.metrics import (precision_score,
                              recall_score,
                              accuracy_score,
@@ -15,16 +16,15 @@ from sklearn.metrics import (precision_score,
                              )
 
 sns.set_theme(style='whitegrid', font_scale=2.0)
-
-
 THRESHOLD_DEPENDENT = ['accuracy_score', 'recall_score', 'precision_score']
-
 
 class BinaryEvaluator:
 
-    def __init__(self, outdir):
+    def __init__(self, outdir, task_name=None):
         self.outdir = outdir
+        self.task_name = task_name
         self.metrics = {
+            'Prevalence': self.compute_prevalence,
             'Accuracy': accuracy_score,
             'Sensitivity': recall_score,
             'Specificity': recall_score,
@@ -41,11 +41,13 @@ class BinaryEvaluator:
         """
         self.get_performance_artifacts(labels, predictions)
 
-    def get_performance_artifacts(self, labels, predictions):
+    def get_performance_artifacts(self, labels, predictions, **kwargs):
         """
         Computes a suite of performance measures and saves artifacts
         """
         results = self.bootstrap_metric(labels, predictions, self.metrics)
+        results['Task'] = self.task_name
+        results['N'] = len(labels)            
         with open(os.path.join(self.outdir, "metrics.json"), "w") as fp:
             json.dump(results, fp)
 
@@ -225,7 +227,6 @@ class BinaryEvaluator:
                     actual_values[m] = metrics[m](labels, predicted_labels)
             else:
                 actual_values[m] = metrics[m](labels, predictions)
-
         results = {}
         for v in values:
             mean = '{:.2f}'.format(round(actual_values[v], 2))
@@ -234,3 +235,58 @@ class BinaryEvaluator:
             results[v] = f"{mean} [{lower}, {upper}]"
 
         return results
+
+    def compute_prevalence(self, labels, predictions=None):
+        """
+        Allows predictions so that I don't have to call funtion differently
+        than other metrics but of course doesn't use 
+        """
+        return np.mean(labels)
+
+
+class BinaryTimeDependentEvaluator(BinaryEvaluator):
+    """
+    Extension of BinaryEvaluator that when called expects list of time to label
+    observation as additional input and estimates performance measures based on 
+    only prediction label tuples that meet this criteria.  
+    """
+
+    def __init__(self, outdir, task_name):
+        super().__init__(outdir, task_name)
+    
+    def __call__(self, labels, predictions, time_to_labels, thresholds=None, bins=None):
+        """
+        Call to estimate performance measures across time. 
+        Args:
+            labels: list like of binary labels
+            predictions: list like of predicted probabilities
+            time_to_labels: list like of time from prediction to label
+                observation in hours 
+            thresholds: list of threshold time to label to use fitler preds, labels
+            bins: if not None, number of time bins to estimate performance measures
+        """
+        if thresholds is None:
+            thresholds = np.linspace(0, np.max(time_to_labels), bins)
+        for t in tqdm(thresholds):
+            labels_t = [l for i, l in enumerate(labels) if time_to_labels[i] <= t]
+            predictions_t = [p for i, p in enumerate(
+                predictions) if time_to_labels[i] <= t]
+            print(len(predictions_t))
+            self.get_performance_artifacts(labels_t, predictions_t)
+
+            # Add time threshold to metric json
+            with open(os.path.join(self.outdir, "metrics.json")) as f:
+                metrics = json.load(f)
+            metrics['time_to_label'] = t
+            with open(os.path.join(self.outdir, f"metrics_{t}.json"), "w") as fp:
+                json.dump(metrics, fp)
+
+            # Rename all the saved pngs by appending the time threshold
+            file = os.path.join(self.outdir, "performance_curves.png")
+            new_filename = file.replace('.png', f"_{t}.png")
+            os.system("mv {} {}".format(file, new_filename))
+
+            # If last iteration, remove metrics.json 
+            if t == thresholds[-1]:
+                json_path = os.path.join(self.outdir, "metrics.json")
+                os.system(f"rm {json_path}")

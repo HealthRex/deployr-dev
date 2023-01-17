@@ -1,11 +1,10 @@
+
 DEFAULT_DEPLOY_CONFIG = {
     'Categorical': {
         'Sex': [{'look_back': None}],
         'Race': [{'look_back': None}],
         'Diagnoses': [{'look_back': None}],
         'Medications': [{'look_back': 28}],
-        'Procedures': [{'look_back': 28}]
-
     },
     'Numerical': {
         'Age': [{'look_back': None, 'num_bins': 5}],

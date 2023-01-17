@@ -15,8 +15,9 @@ from google.cloud import bigquery
 from google.cloud.exceptions import NotFound
 import pandas as pd
 
-REPLACE_TABLE = True
+from healthrex_ml.featurizers import DEFAULT_LAB_COMPONENT_IDS
 
+REPLACE_TABLE = True
 
 class FlowsheetBinsExtractor():
     """
@@ -161,7 +162,7 @@ class LabResultBinsExtractor():
     """
 
     def __init__(self, cohort_table_id, feature_table_id,
-                 base_names, bins=5, look_back_days=14,
+                 base_names=DEFAULT_LAB_COMPONENT_IDS, bins=5, look_back_days=14,
                  project_id='som-nero-phi-jonc101', dataset='shc_core_2021'):
         """
         Args:
