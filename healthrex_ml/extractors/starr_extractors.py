@@ -15,7 +15,10 @@ from google.cloud import bigquery
 from google.cloud.exceptions import NotFound
 import pandas as pd
 
-from healthrex_ml.featurizers import DEFAULT_LAB_COMPONENT_IDS
+from healthrex_ml.featurizers import (
+    DEFAULT_LAB_COMPONENT_IDS,
+    DEFAULT_FLOWSHEET_FEATURES
+)
 
 REPLACE_TABLE = True
 
@@ -25,7 +28,7 @@ class FlowsheetBinsExtractor():
     """
 
     def __init__(self, cohort_table_id, feature_table_id,
-                 base_names, look_back_days=3, bins=5,
+                 base_names=DEFAULT_FLOWSHEET_FEATURES, look_back_days=3, bins=5,
                  project_id='som-nero-phi-jonc101', dataset='shc_core_2021'):
         """
         Tokenizes flowsheets into bins and then writes or appends to temp

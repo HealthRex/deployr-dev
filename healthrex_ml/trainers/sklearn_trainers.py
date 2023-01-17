@@ -192,7 +192,7 @@ class BaselineModelTrainer():
             'labels': y_test[self.task].values,
             'predictions': predictions
         })
-        yhats_path = f"{self.task}_yhats"
+        yhats_path = f"{self.task}_yhats.csv"
         df_yhats.to_csv(os.path.join(self.working_dir, yhats_path), index=None)
         self.generate_deploy_config()
 
