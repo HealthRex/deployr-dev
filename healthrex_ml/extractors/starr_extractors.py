@@ -144,7 +144,7 @@ class FlowsheetBinsExtractor():
         AND
             f.row_disp_name in {self.base_names}
         AND
-            f.numerical_val_1 IS NOT NULL
+            safe_cast(f.numerical_val_1 AS float64) IS NOT NULL
         )
 
         SELECT DISTINCT
