@@ -3,23 +3,40 @@
 
 Tools for creating cohorts, features, and models
 
-1. Clone the repo
-```git clone https://github.com/HealthRex/healthrex_ml.git```
 
-2. Create a new environment, note python version
-```conda create -n healthrex_ml python=3.7.6```
+## Installation
 
-3. Activate new env
-```conda activate healthrex_ml```
+### Install a release version
 
-3. Install healthrex_ml
-```pip install -e .```
+TODO: Publish this to PyPI
 
-4. Install dependencies
-```pip install -r requirements.txt```
+This package is intended to be directly hosted on PyPI. Once that happens, just do:
+```bash
+pip install healthrex_ml
+```
 
-5. Install lightbm (with conda)
-```conda install lightgbm=3.1.1```
+Until then, follow the steps below
+
+### Install the latest/local build
+
+This option works well for testing changes to the code locally, and/or for publishing new releases to PyPI.
+
+This repo requires at least Python 3.7.1 and supports up to Python 3.10.8. Steps to build are as-follows:
+
+1. Install Python Poetry here: https://python-poetry.org/
+2. Run `poetry build`
+3. `pip install` the wheel from the `dist` folder directly, e.g.:
+```bash
+pip install dist/healthrex_ml-0.1.0-py3-none-any.whl # Whatever is in the `dist` folder
+```
+
+To publish to PyPI, run `poetry publish` with the proper credentials.
+
+## Development + Contributing
+
+The quickest way to contribute is to fork the repo and then open a PR against `main`.
+
+Feel free to request access as a collaborator if you expect to update + contribute frequently!
 
 ##### healthrex_ml/cohorts
 Cohort definitions for various supervised ml tasks
