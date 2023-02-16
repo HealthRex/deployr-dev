@@ -1,0 +1,6 @@
+# Revelant if you're using pyenv to manage multiple Python versions
+# Ref: https://github.com/pyenv/pyenv
+3.10
+3.9
+3.8
+3.7
