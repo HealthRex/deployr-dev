@@ -8,14 +8,14 @@ class InpatientMortalityCohort(CohortBuilder):
     Defines a cohort for the task of predicting inpatient mortality.
     """
 
-    def __init__(self, client, dataset_name, table_name,
+    def __init__(self, client, dataset_name, table_name, num_obs,
                  working_project_id='mining-clinical-decisions'):
         """
         Initializes dataset_name and table_name for where cohort table will be
         saved on bigquery
         """
         super(InpatientMortalityCohort, self).__init__(
-            client, dataset_name, table_name, working_project_id)
+            client, dataset_name, table_name, num_obs, working_project_id)
 
     def __call__(self):
         """
@@ -97,7 +97,7 @@ class InpatientMortalityCohort(CohortBuilder):
             full_cohort 
         )
         WHERE
-            seqnum <= 2000
+            seqnum <= {self.num_obs}
         )        
         """
         query_job = self.client.query(query)
@@ -110,14 +110,14 @@ class LongLengthOfStayCohort(CohortBuilder):
     patients who stayed in inpatient setting for seven days or longer. 
     """
 
-    def __init__(self, client, dataset_name, table_name,
+    def __init__(self, client, dataset_name, table_name, num_obs,
                  working_project_id='mining-clinical-decisions'):
         """
         Initializes dataset_name and table_name for where cohort table will be
         saved on bigquery
         """
         super(LongLengthOfStayCohort, self).__init__(
-            client, dataset_name, table_name, working_project_id)
+            client, dataset_name, table_name, num_obs, working_project_id)
 
     def __call__(self):
         """
@@ -190,7 +190,7 @@ class LongLengthOfStayCohort(CohortBuilder):
             full_cohort 
         )
         WHERE
-            seqnum <= 2000
+            seqnum <= {self.num_obs}
 
         )
         """
@@ -202,19 +202,19 @@ class ThirtyDayReadmission(CohortBuilder):
     Defines a cohort for the task of predicting inpatient mortality.
     """
 
-    def __init__(self, client, dataset_name, table_name,
+    def __init__(self, client, dataset_name, table_name, num_obs,
                  working_project_id='mining-clinical-decisions'):
         """
         Initializes dataset_name and table_name for where cohort table will be
         saved on bigquery
         """
         super(ThirtyDayReadmission, self).__init__(
-            client, dataset_name, table_name, working_project_id)
+            client, dataset_name, table_name, num_obs, working_project_id)
 
     def __call__(self):
         """
-        Function that constructs a cohort table for predicting cbc with
-        differential results. Done with SQL logic where possible
+        Function that constructs a cohort table for predicting readmission within
+        thirty days. Done with SQL logic where possible
         """
         query = f"""
         CREATE OR REPLACE TABLE 
@@ -223,81 +223,85 @@ class ThirtyDayReadmission(CohortBuilder):
         -- Use ADT table to get inpatient admits, discharge times if they exist,
         -- and Transfer Out times.
         WITH inpatient_admits as (
-        SELECT 
-            anon_id, pat_enc_csn_id_coded, 
-            CASE WHEN in_event_type IS NOT NULL THEN in_event_type
-            ELSE REPLACE(out_event_type, ' ', '') END event_type,
-            event_time_jittered_utc
-        FROM
-            `som-nero-phi-jonc101.shc_core_2021.adt` 
-        WHERE
-            pat_class = 'Inpatient' AND
-            (in_event_type = 'Admission' or out_event_type = 'Discharge')
+            SELECT 
+                anon_id, pat_enc_csn_id_coded, 
+                CASE WHEN in_event_type IS NOT NULL THEN in_event_type
+                ELSE REPLACE(out_event_type, ' ', '') END event_type,
+                event_time_jittered_utc
+            FROM
+                `som-nero-phi-jonc101.shc_core_2021.adt` 
+            WHERE
+                pat_class = 'Inpatient' AND
+                (in_event_type = 'Admission' or out_event_type = 'Discharge')
         ),
         -- Join to demographics table to get death date for each patient
         admissions_with_death_date as (
-        SELECT DISTINCT 
-            ia.*, d.death_date_jittered
-        FROM
-            inpatient_admits ia
-        INNER JOIN
-            `som-nero-phi-jonc101.shc_core_2021.demographic` d
-        USING
-            (anon_id)
+            SELECT DISTINCT 
+                ia.*, d.death_date_jittered
+            FROM
+                inpatient_admits ia
+            INNER JOIN
+                `som-nero-phi-jonc101.shc_core_2021.demographic` d
+            USING
+                (anon_id)
         ),
-        -- Pivot so that we have one column for admission, transfer out and
-        -- discharge time (take latest of tranfer out times)
         admissions_wide as (
-        SELECT 
-            *
-        FROM
-            admissions_with_death_date
-        PIVOT (
-            MAX(event_time_jittered_utc) as event_time
-            FOR event_type in ('Admission', 'Discharge')
-        )
-        WHERE
-            event_time_Admission IS NOT NULL AND event_time_Discharge IS NOT
-            NULL
-        ORDER BY 
-            anon_id, event_time_Admission
-
+            SELECT 
+                *
+            FROM
+                admissions_with_death_date
+            PIVOT (
+                MAX(event_time_jittered_utc) as event_time
+                FOR event_type in ('Admission', 'Discharge')
+            )
+            WHERE
+                event_time_Admission IS NOT NULL AND 
+                event_time_Discharge IS NOT NULL
+            ORDER BY 
+                anon_id, event_time_Admission, death_date_jittered
         ),
-        -- join back to inpatient_admits to get nearest readmission
-        full_cohort as (
-        SELECT
-            a.anon_id, a.pat_enc_csn_id_coded observation_id,
-            event_time_Discharge index_time,
-            MAX(
-            CASE WHEN TIMESTAMP_DIFF(ia.event_time_jittered_utc, 
-            a.event_time_Discharge, DAY) > 30
-            THEN 0 WHEN ia.event_time_jittered_utc IS NULL THEN 0
-            ELSE 1 END) label,
-            MIN(ia.event_time_jittered_utc) next_admit_time,
-            MIN(TIMESTAMP_DIFF(ia.event_time_jittered_utc,
-                               a.event_time_Discharge, DAY)) days_to_next_admit
-        FROM
-            admissions_wide a
-        LEFT JOIN
-            (SELECT * FROM inpatient_admits WHERE event_type = 'Admission') ia
-        USING
-            (anon_id)
-        WHERE
-            ia.event_time_jittered_utc > a.event_time_Discharge OR 
-            ia.event_time_jittered_utc IS NULL
-        AND
-            EXTRACT(YEAR FROM event_time_Discharge) BETWEEN 2009 and 2021
-        GROUP BY
-            anon_id, observation_id, index_time
+        full_cohort_no_label AS (
+            SELECT
+                a.anon_id,
+                a.pat_enc_csn_id_coded AS observation_id,
+                event_time_Discharge AS index_time,
+                LEAD(event_time_Admission, 1)
+                    OVER(PARTITION BY anon_id ORDER BY a.pat_enc_csn_id_coded) AS next_admit_time, 
+                
+            FROM 
+                admissions_wide a
+            LEFT JOIN
+                (SELECT * FROM inpatient_admits WHERE event_type='Admission') ia
+            USING 
+                (anon_id)
+            WHERE
+                ia.event_time_jittered_utc IS NOT NULL
+            GROUP BY
+                anon_id, observation_id, event_time_Admission, index_time
+            ORDER BY
+                anon_id, index_time
         ),
-
-        full_cohort_time_window as (
-          SELECT * FROM
-          full_cohort
-          WHERE
-          EXTRACT(YEAR FROM index_time) BETWEEN 2015 and 2020
+        full_cohort_with_label AS (
+            SELECT 
+                f.anon_id, f.observation_id, f.index_time, f.next_admit_time,
+                TIMESTAMP_DIFF(f.next_admit_time, index_time, DAY) AS days_to_next_admit,
+                MAX(CASE WHEN TIMESTAMP_DIFF(next_admit_time, index_time, DAY) > 30 THEN 0
+                            WHEN next_admit_time IS NULL THEN 0
+                            ELSE 1 END) AS label
+            FROM
+                full_cohort_no_label as f
+            GROUP BY
+                anon_id, f.observation_id, f.index_time, f.next_admit_time
+            ORDER BY
+                anon_id, index_time
+        ),
+        full_cohort_time_window AS (
+            SELECT * 
+            FROM
+                full_cohort_with_label
+            WHERE
+                EXTRACT(YEAR FROM index_time) BETWEEN 2009 and 2021
         )
-
         SELECT
         *
         FROM
@@ -308,13 +312,14 @@ class ThirtyDayReadmission(CohortBuilder):
             full_cohort_time_window
         )
         WHERE
-            seqnum <= 2000
+            seqnum <= {self.num_obs}
 
         )        
         """
         query_job = self.client.query(query)
         query_job.result()
 
+#TODO: Update with capabilities for controlling the number of observations (default = 2000)
 class CBCWithDifferentialED(CohortBuilder):
     """
     For Censoring mechanisms in applied ML paper. Task is predict normality
