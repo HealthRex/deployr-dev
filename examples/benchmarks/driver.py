@@ -75,6 +75,11 @@ parser.add_argument(
     help='Whether to call extractors, if False assumes feature table exists'
 )
 parser.add_argument(
+    '--num_obs',
+    default=2000,
+    help='Number of patients desired in cohort'
+)
+parser.add_argument(
     '--featurize',
     action='store_true',
     help='Whether to featurize'
@@ -90,6 +95,13 @@ parser.add_argument(
     nargs='+',
     default=[2009, 2010, 2011, 2012, 2013, 2014, 2015],
     help="What years between 2009 and 2021 to use as the training set"
+)
+parser.add_argument(
+    '--test_years',
+    type=int,
+    nargs='+',
+    default=[2016, 2017, 2018, 2019, 2020, 2021],
+    help="What years between 2009 and 2021 to use as the test set"
 )
 parser.add_argument(
     '--evaluate',
@@ -199,6 +211,7 @@ if args.build_cohort:
     c = cohort_builders[args.cohort](
         client=client,
         dataset_name=DATASET_NAME,
+        num_obs = args.num_obs,
         table_name=f"{args.experiment_name}_{args.cohort}")
     c()
 
@@ -212,7 +225,7 @@ if args.featurize:
     #Set train_years and test_years
     all_years = [i for i in range(2009, 2022)]
     train_years = args.train_years
-    test_years = [year for year in all_years if year not in train_years]
+    test_years = args.test_years
     featurizer = featurizers[args.featurizer](
         cohort_table_id=cohort_table_id,
         feature_table_id=feature_table_id,
