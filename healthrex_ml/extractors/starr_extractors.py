@@ -595,7 +595,7 @@ class PatientProblemGroupExtractor():
         LEFT JOIN 
             mining-clinical-decisions.mapdata.ahrq_ccsr_diagnosis ccsr
         ON
-            dx.icd10 = ccsr.icd10
+            REPLACE(dx.icd10, '.', '') = ccsr.icd10_string
         WHERE 
             CAST(dx.start_date_utc as TIMESTAMP) < labels.index_time
         AND
