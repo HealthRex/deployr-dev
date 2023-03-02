@@ -9,3 +9,5 @@ grpcio-tools==1.44.0 # for weird protobuf errors
 seaborn==0.12.1
 jupyter==1.0.0 # likely useful
 pyyaml==6.0
+requests==2.25.0
+xmltodict==0.12.0
