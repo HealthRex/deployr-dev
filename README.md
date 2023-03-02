@@ -4,7 +4,7 @@
 Tools for creating cohorts, features, and models
 
 1. Clone the repo
-```git clone https://github.com/HealthRex/healthrex_ml.git```
+```git clone https://github.com/HealthRex/deployr-dev.git```
 
 2. Create a new environment, note python version
 ```conda create -n healthrex_ml python=3.7.6```
