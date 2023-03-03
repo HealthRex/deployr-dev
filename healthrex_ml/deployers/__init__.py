@@ -1,2 +1,2 @@
 from healthrex_ml.deployers.constants import RACE_MAPPING
-from healthrex_ml.deployers.SklearnDeployer import SklearnDeployer
+from healthrex_ml.deployers.sklearn_deployers import SklearnDeployer

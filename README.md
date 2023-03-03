@@ -1,7 +1,7 @@
 
 # deployr-dev
 
-Tools for creating cohorts, features, and models
+Tools for creating cohorts and features, training and deploying models using electronic medical record data.
 
 1. Clone the repo
 ```git clone https://github.com/HealthRex/deployr-dev.git```
