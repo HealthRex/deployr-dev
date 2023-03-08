@@ -261,41 +261,48 @@ class ThirtyDayReadmission(CohortBuilder):
             NULL
         ORDER BY 
             anon_id, event_time_Admission
-
         ),
         -- join back to inpatient_admits to get nearest readmission
-        full_cohort as (
-        SELECT
-            a.anon_id, a.pat_enc_csn_id_coded observation_id,
-            event_time_Discharge index_time,
-            MAX(
-            CASE WHEN TIMESTAMP_DIFF(ia.event_time_jittered_utc, 
-            a.event_time_Discharge, DAY) > 30
-            THEN 0 WHEN ia.event_time_jittered_utc IS NULL THEN 0
-            ELSE 1 END) label,
-            MIN(ia.event_time_jittered_utc) next_admit_time,
-            MIN(TIMESTAMP_DIFF(ia.event_time_jittered_utc,
-                               a.event_time_Discharge, DAY)) days_to_next_admit
-        FROM
-            admissions_wide a
-        LEFT JOIN
-            (SELECT * FROM inpatient_admits WHERE event_type = 'Admission') ia
-        USING
-            (anon_id)
-        WHERE
-            ia.event_time_jittered_utc > a.event_time_Discharge OR 
-            ia.event_time_jittered_utc IS NULL
-        AND
-            EXTRACT(YEAR FROM event_time_Discharge) BETWEEN 2009 and 2021
-        GROUP BY
-            anon_id, observation_id, index_time
+         full_cohort_no_label AS (
+            SELECT
+                a.anon_id,
+                a.pat_enc_csn_id_coded AS observation_id,
+                event_time_Discharge AS index_time,
+                LEAD(event_time_Admission, 1)
+                    OVER(PARTITION BY anon_id ORDER BY a.pat_enc_csn_id_coded) AS next_admit_time, 
+                
+            FROM 
+                admissions_wide a
+            LEFT JOIN
+                (SELECT * FROM inpatient_admits WHERE event_type='Admission') ia
+            USING 
+                (anon_id)
+            WHERE
+                ia.event_time_jittered_utc IS NOT NULL
+            GROUP BY
+                anon_id, observation_id, event_time_Admission, index_time
+            ORDER BY
+                anon_id, index_time
         ),
-
+        full_cohort_with_label AS (
+            SELECT 
+                f.anon_id, f.observation_id, f.index_time, f.next_admit_time,
+                TIMESTAMP_DIFF(f.next_admit_time, index_time, DAY) AS days_to_next_admit,
+                MAX(CASE WHEN TIMESTAMP_DIFF(next_admit_time, index_time, DAY) > 30 THEN 0
+                            WHEN next_admit_time IS NULL THEN 0
+                            ELSE 1 END) AS label
+            FROM
+                full_cohort_no_label as f
+            GROUP BY
+                anon_id, f.observation_id, f.index_time, f.next_admit_time
+            ORDER BY
+                anon_id, index_time
+        ),
         full_cohort_time_window as (
           SELECT * FROM
           full_cohort
           WHERE
-          EXTRACT(YEAR FROM index_time) BETWEEN 2015 and 2020
+          EXTRACT(YEAR FROM index_time) BETWEEN 2009 and 2021
         )
 
         SELECT
