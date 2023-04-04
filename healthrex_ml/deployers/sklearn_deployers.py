@@ -26,8 +26,8 @@ class SklearnDeployer(object):
     vector using EPIC and FHIR APIs that plugs into a binary classification
     model trained using an SklearnTrainer. 
     """
-    def __init__(self, filepath, credentials, csn,
-                 env, client_id, fhir_stu3=None, from_fhir=False):
+    def __init__(self, filepath, credentials, csn, env, client_id,
+                 databricks_endpoint=None, fhir_stu3=None, from_fhir=False):
         """
         Args:   
             filepath: path to deploy config file saved by SklearnTrainer.
@@ -47,7 +47,11 @@ class SklearnDeployer(object):
         self.client_id = client_id
         with open(filepath, 'rb') as f:
             self.deploy = pickle.load(f)
-        self.clf = self.deploy['model']
+        if databricks_endpoint is None:
+            self.clf = self.deploy['model']
+        else:
+            self.clf = None
+        self.databricks_endpoint = databricks_endpoint
         self.feature_types = self.deploy['feature_config']
         self.feature_order = self.deploy['feature_order']
         self.bin_lup = self.deploy['bin_map']
@@ -73,10 +77,41 @@ class SklearnDeployer(object):
                     self.feature_vector).toarray()
         else:
             self.feature_vector = feature_vector
-        score = self.clf.predict_proba(self.feature_vector)[:, 1][0]
+        if self.clf is not None:
+            score = self.clf.predict_proba(self.feature_vector)[:, 1][0]
+        else:
+            score = self.get_score_from_databricks()
         self.patient_dict['score'] = score
         self.patient_dict = self.get_patient_dict()
         return score
+
+    def get_score_from_databricks(self):
+        """
+        Sends a HTTPS POST request to a served databricks model that includes
+        feature vector in request data. Score is returned as a pandas series
+        consistent with how databricks does model serving. Request uses bearer
+        authentication. Azure secrets used to store service principal token AND
+        the models endpoint.
+        """
+        def create_tf_serving_json(data):
+            return {'inputs': {name: data[name].tolist() for name in 
+                               data.keys()} if isinstance(data, dict) else 
+                               data.tolist()}
+        headers = {
+            'Authorization': f'Bearer {os.environ.get("DATABRICKS_TOKEN")}',
+            'Content-Type': 'application/json'
+        }
+        ds_dict = self.feature_vector.to_dict(orient='split') \
+            if isinstance(self.feature_vector, pd.DataFrame) \
+            else create_tf_serving_json(self.feature_vector)
+        data_json = json.dumps(ds_dict, allow_nan=True)
+        response = requests.request(method='POST',
+                                    headers=headers,
+                                    url=self.databricks_endpoint,
+                                    data=data_json)
+        if response.status_code != 200:
+            raise Exception(f'Request failed with status {response.status_code}, {response.text}')
+        return response.json()['predictions']
 
     def compress_feature_vector(self):
         """
