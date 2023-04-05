@@ -290,6 +290,75 @@ class LabResultBinsExtractor():
         """
         df = pd.read_gbq(query)
         return df
+    
+    
+class LabResultNumericalExtractor():
+    """
+    Defines logic to extract lab results in numerical forms, the feature names are prefixed with "NUM__MEAN_"
+    """
+
+    def __init__(self, cohort_table_id, feature_table_id,
+                 base_names=DEFAULT_LAB_COMPONENT_IDS, look_back_days=3,
+                 project_id='som-nero-phi-jonc101', dataset='shc_core_2021'):
+        """
+        Args:
+            cohort_table: name of cohort table -- used to join to features
+            temp_dataset: name of temp dataset with cohort table
+            project_id: name of project you are extracting data from
+            dataset: name of dataset you are extracting data from
+        """
+        self.cohort_table_id = cohort_table_id
+        self.feature_table_id = feature_table_id
+        self.client = bigquery.Client()
+        self.look_back_days = look_back_days
+        self.project_id = project_id
+        self.dataset = dataset
+        self.base_name_string = "("
+        for i, base_name in enumerate(base_names):
+            if i == len(base_names) - 1:
+                self.base_name_string += f"'{base_name}')"
+            else:
+                self.base_name_string += f"'{base_name}', "
+
+    def __call__(self):
+        """
+        Executes queries and returns all 
+        """
+        query = f"""
+        SELECT DISTINCT
+            labels.observation_id,
+            labels.index_time,
+            '{self.__class__.__name__}' as feature_type,
+            lr.result_time_utc as feature_time,
+            CAST(lr.order_id_coded AS STRING) as feature_id,
+            CONCAT('NUM__MEAN_', lr.base_name) as feature,
+            CAST(AVG(lr.ord_num_value) AS INT64) as value
+        FROM
+            {self.cohort_table_id}
+             labels
+        LEFT JOIN
+            {self.project_id}.{self.dataset}.lab_result lr
+        ON
+            labels.anon_id = lr.anon_id
+        WHERE
+            lr.result_time_utc < labels.index_time
+        AND
+            TIMESTAMP_ADD(lr.result_time_utc,
+                          INTERVAL 24*{self.look_back_days} HOUR)
+                          >= labels.index_time
+        AND
+            lr.base_name in {self.base_name_string}
+        AND
+            lr.ord_num_value IS NOT NULL
+        GROUP BY
+            labels.observation_id, labels.index_time, lr.result_time_utc, lr.order_id_coded, lr.base_name
+        """
+        query = add_create_or_append_logic(query, self.feature_table_id)
+        query_job = self.client.query(query)
+        query_job.result()
+        
+        
+
 
 class MedicationExtractor():
     """
@@ -505,6 +574,87 @@ class LabOrderExtractor():
         query_job = self.client.query(query)
         query_job.result()
 
+class LabOrderNumberExtractor():
+    """
+    Defines logic to extract number of lab orders (CBC and metabolic panels) from 
+    order_proc
+    """
+
+    def __init__(self, cohort_table_id, feature_table_id,
+                 look_back_days=7, project_id='som-nero-phi-jonc101',
+                 dataset='shc_core_2021'):
+        """
+        Args:
+            cohort_table: name of cohort table -- used to join to features
+            project_id: name of project you are extracting data from
+            dataset: name of dataset you are extracting data from
+        """
+        self.cohort_table_id = cohort_table_id
+        self.look_back_days = look_back_days
+        self.project_id = project_id
+        self.dataset = dataset
+        self.feature_table_id = feature_table_id
+        self.client = bigquery.Client()
+
+    def __call__(self):
+        """
+        Executes queries and returns all 
+        """
+        query = f"""
+        SELECT DISTINCT
+            labels.observation_id,
+            labels.index_time,
+            '{self.__class__.__name__ + '_' + str(self.look_back_days)}' as feature_type,
+            op.order_time_jittered_utc as feature_time,
+            CAST(op.order_proc_id_coded as STRING) as feature_id,
+            'CBC' as feature,
+            1 as value
+        FROM
+            {self.cohort_table_id}
+            labels
+        LEFT JOIN
+            {self.project_id}.{self.dataset}.order_proc op
+        ON
+            labels.anon_id = op.anon_id
+        WHERE 
+            ((UPPER(op.description) LIKE '%CBC%')) -- order_type in ('Lab', 'Microbiology Culture', 'Microbiology')
+        AND
+            CAST(op.order_time_jittered_utc as TIMESTAMP) < labels.index_time
+        AND
+            TIMESTAMP_ADD(op.order_time_jittered_utc,
+                          INTERVAL 24*{self.look_back_days} HOUR)
+                          >= labels.index_time
+        UNION ALL
+        
+        SELECT DISTINCT
+            labels.observation_id,
+            labels.index_time,
+            '{self.__class__.__name__ + '_' + str(self.look_back_days)}' as feature_type,
+            op.order_time_jittered_utc as feature_time,
+            CAST(op.order_proc_id_coded as STRING) as feature_id,
+            'MP' as feature,
+            1 as value
+        FROM
+            {self.cohort_table_id}
+            labels
+        LEFT JOIN
+            {self.project_id}.{self.dataset}.order_proc op
+        ON
+            labels.anon_id = op.anon_id
+        WHERE 
+            ((UPPER(op.description) LIKE '%METABOLIC PANEL%')) -- order_type in ('Lab', 'Microbiology Culture', 'Microbiology')
+        AND
+            CAST(op.order_time_jittered_utc as TIMESTAMP) < labels.index_time
+        AND
+            TIMESTAMP_ADD(op.order_time_jittered_utc,
+                          INTERVAL 24*{self.look_back_days} HOUR)
+                          >= labels.index_time
+        """
+        query = add_create_or_append_logic(query, self.feature_table_id)
+        query_job = self.client.query(query)
+        query_job.result()
+
+        
 class PatientProblemExtractor():
     """
     Defines logic to extract diagnoses on the patient's problem list
