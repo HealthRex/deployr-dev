@@ -98,7 +98,7 @@ class SklearnDeployer(object):
                                data.keys()} if isinstance(data, dict) else 
                                data.tolist()}
         headers = {
-            'Authorization': f'Bearer {os.environ.get("DATABRICKS_TOKEN")}',
+            'Authorization': f'Bearer {os.environ.get("MLFOW-TOKEN")}',
             'Content-Type': 'application/json'
         }
         ds_dict = self.feature_vector.to_dict(orient='split') \
