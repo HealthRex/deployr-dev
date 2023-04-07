@@ -576,8 +576,7 @@ class LabOrderExtractor():
                               >= labels.index_time
             """
         else:
-            query_str = f"((UPPER(op.description) LIKE '%{self.include_list[0]}%'))"
-            query_str += ''.join([f"((UPPER(op.description) LIKE '%{self.include_list[i]}%'))" for i in range(1,len(self.include_list))])
+            query_str = ' OR '.join([f"((UPPER(op.description) LIKE '%{self.include_list[i]}%'))" for i in range(len(self.include_list))])
             query = f"""
             SELECT DISTINCT
                 labels.observation_id,
