@@ -410,8 +410,8 @@ class BagOfWordsFeaturizer():
         constructs local sparse matrices that can be fed into various sklearn
         style classifiers. 
         """
-
-        # Go from timeline to counts
+        
+        # Go from timeline to counts for categorical features and to average values for numerical features
         query = f"""
         CREATE OR REPLACE TABLE {self.feature_table_id}_bow AS (
         SELECT 
@@ -422,10 +422,28 @@ class BagOfWordsFeaturizer():
             feature_type IS NOT NULL
         AND
             feature IS NOT NULL
+        AND
+            feature NOT LIKE 'NUM__%'
         GROUP BY 
             observation_id, index_time, feature_type, feature
-        )
+        );
+        
+        INSERT INTO {self.feature_table_id}_bow 
+        SELECT 
+            observation_id, index_time, feature_type, feature, CAST(AVG(value) AS INT64) value 
+        FROM 
+            {self.feature_table_id}
+        WHERE 
+            feature_type IS NOT NULL
+        AND
+            feature IS NOT NULL
+        AND
+            feature LIKE 'NUM__%'
+        GROUP BY 
+            observation_id, index_time, feature_type, feature
+        ;
         """
+        
         query_job = self.client.query(query)
         query_job.result()
 
@@ -486,5 +504,3 @@ class BagOfWordsFeaturizer():
             for j, term in enumerate(d):
                 vocabulary.setdefault(term, len(vocabulary))
         return vocabulary
-
-
