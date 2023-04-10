@@ -223,8 +223,11 @@ class SklearnDeployer(object):
             auth=HTTPBasicAuth(self.credentials["username"],
                                self.credentials["password"])
         )
-
-        patient_problem_dict = xmltodict.parse(patient_problem_request.text)
+        try:
+            patient_problem_dict = xmltodict.parse(patient_problem_request.text)
+        except:
+            raise ValueError(f'Request text: {patient_problem_request.text} | Request status: {patient_problem_request.status}') 
+                            
         if 'Bundle' not in patient_problem_dict:  # Some patients restricted
             print('no entries')
             return
