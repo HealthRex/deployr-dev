@@ -1,2 +1,3 @@
-from healthrex_ml.deployers.constants import RACE_MAPPING
+from healthrex_ml.deployers.constants import RACE_MAPPING, EXTERNAL_SCORE_PACKET
 from healthrex_ml.deployers.sklearn_deployers import SklearnDeployer
+from healthrex_ml.deployers.integrations import write_to_external_score_column
