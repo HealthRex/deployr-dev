@@ -17,6 +17,8 @@ from dateutil.parser import parse
 import xml.etree.ElementTree as ET
 from tqdm import tqdm
 import pickle
+from thefuzz import process
+from thefuzz import fuzz
 
 from healthrex_ml.deployers import RACE_MAPPING
 
@@ -314,7 +316,70 @@ class SklearnDeployer(object):
                     self.patient_dict[med_name] += 1
                 else:
                     self.patient_dict[med_name] = 1
+                    
+    def _get_medications_group(self, FHIR_ID):
+        """
+        Pulls patient medications (current and discontinued) from their medical 
+        history with using look back window from deploy config file. Populates
+        the patient dictionary with the therapy class names. 
+        
+        TODO: this is seemingly only letting me return 1000 entries. They are
+        not ordered by time, worried I'm only getting a sample of all existing
+        orders during my look back window.  Can I control max entries? 
+        """
+        
+        def map_medication_to_thera_class(medication_name, mapping_df, matching_thres=50):
+            """
+            Map medication name to therapy class using fuzzy matching. Mapping_df has medication name as index,  and one column named 'thera_class_abbr'.
+            """
+            results = process.extract(medication_name.upper(), list(mapping_df.index), limit=1, scorer=fuzz.partial_ratio)
+            if results[0][1]>=matching_thres:
+                return mapping_df.loc[results[0][0]]['thera_class_abbr']
+            else:
+                return ''
 
+        params = {
+            'patient': FHIR_ID,
+        }
+        request_results = requests.get(
+            f"{os.environ['EPIC_ENV']}api/FHIR/R4/MedicationRequest",
+            params=params,
+            headers={'Epic-Client-ID': os.environ['EPIC_CLIENT_ID']},
+            auth=HTTPBasicAuth(os.environ["secretID"],
+                               os.environ["secretpass"])
+        )
+        med_dict = xmltodict.parse(request_results.text)        
+        
+        # No result
+        if ("Bundle" not in med_dict):
+            return
+        # One result -> make it a list
+        if type(med_dict['Bundle']['entry']) == collections.OrderedDict:
+            med_dict['Bundle']['entry'] = [med_dict['Bundle']['entry']]
+
+        #Get look_back window from deployment config
+        look_back = self.feature_types['Categorical']['Medications_group'][0][
+                'look_back']
+        max_time_delta = timedelta(days=look_back)
+        # Multiple results
+        for entry in tqdm(med_dict['Bundle']['entry']):
+            if not("MedicationRequest" in entry['resource']):
+                continue
+            med_name = entry['resource'][
+                'MedicationRequest']['medicationReference']['display']['@value']
+            order_time = entry['resource'][
+                'MedicationRequest']['authoredOn']['@value']
+            try:
+                order_date_time = datetime.strptime(
+                    order_time, '%Y-%m-%dT%H:%M:%SZ')
+            except:
+                order_date_time = datetime.strptime(order_time, '%Y-%m-%d')
+
+            if datetime.now() - order_date_time <= max_time_delta:
+                thera_class = map_medication_to_thera_class(med_name, self.feature_types['Categorical']['Medications_group'][0]['mapping_df'])
+                if thera_class != '':
+                    self.patient_dict[thera_class] = 1
+                    
     def _get_demographics(self):
         """ 
         Calls `GETPATIENTDEMOGRAPHICS` EPIC API and populates patient_dict 
