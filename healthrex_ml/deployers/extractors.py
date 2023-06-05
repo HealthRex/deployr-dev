@@ -25,7 +25,7 @@ def fhir_observation_search(fhir_identifier, code=None, category='laboratory'):
     """
     params = {'patient': fhir_identifier,
               'category': category if code is None else None,
-              'code': code if code is not None else None,
+              'code': code,
               '_count': '1000',
               '_format': 'json'}
     observation_request = requests.get(
