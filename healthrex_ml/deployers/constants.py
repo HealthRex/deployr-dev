@@ -15,7 +15,7 @@ VITALSIGN_MAPPING = {
     'Diastolic blood pressure': 'BP_Low_Diastolic', 
     'Temp': 'Temp', 
     'Pulse': 'Pulse', 
-    'Resp': 'Resp Rate', 
+    'Resp Rate': 'Resp', 
     'SpO2': 'SpO2', 
     'Heart Rate': 'Heart Rate'
 }
