@@ -10,6 +10,17 @@ RACE_MAPPING = {
     '': 'missing',
 }
 
+VITALSIGN_MAPPING = {
+    'Systolic blood pressure': 'BP_High_Systolic', 
+    'Diastolic blood pressure': 'BP_Low_Diastolic', 
+    'Temp': 'Temp', 
+    'Pulse': 'Pulse', 
+    'Resp Rate': 'Resp', 
+    'SpO2': 'SpO2', 
+    'Heart Rate': 'Heart Rate'
+}
+
+
 EXTERNAL_SCORE_PACKET = {
     "result": {
         "exit_code": "0",
