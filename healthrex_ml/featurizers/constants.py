@@ -44,7 +44,8 @@ DEFAULT_LAB_COMPONENT_IDS = [
     'PHV',  # Venous pH
     'PO2V',  # Venous pO2
     'PCO2V',  # Venous pCO2
-    'CAION'  # Ionized Calcium
+    'CAION',  # Ionized Calcium
+    'PHOS'  # Phosphorus
 ]
 
 DEFAULT_FLOWSHEET_FEATURES = [
