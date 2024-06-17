@@ -1270,3 +1270,96 @@ class CBCWithDifferentialCohortSmall(CohortBuilder):
         """
         query_job = self.client.query(query)
         query_job.result()
+
+class LongLengthOfStayCohort2023(CohortBuilder):
+    """
+    Defines a cohort of patients admitted to hospital, positive label for
+    patients who stayed in inpatient setting for seven days or longer. 
+    """
+
+    def __init__(self, client, dataset_name, table_name,
+                 working_project_id='mining-clinical-decisions'):
+        """
+        Initializes dataset_name and table_name for where cohort table will be
+        saved on bigquery
+        """
+        super(LongLengthOfStayCohort2023, self).__init__(
+            client, dataset_name, table_name, working_project_id)
+
+    def __call__(self):
+        """
+        Function that constructs a cohort table for predicting cbc with
+        differential results. Done with SQL logic where possible
+        """
+        query = f"""
+        CREATE OR REPLACE TABLE 
+        {self.project_id}.{self.dataset_name}.{self.table_name}
+        AS (
+        -- Use ADT table to get inpatient admits, discharge times if they exist,
+        -- and Transfer Out times.
+        WITH inpatient_admits as (
+        SELECT 
+            anon_id, pat_enc_csn_id_coded, 
+            CASE WHEN in_event_type IS NOT NULL THEN in_event_type
+            ELSE REPLACE(out_event_type, ' ', '') END event_type,
+            event_time_jittered_utc
+        FROM
+            `som-nero-phi-jonc101.shc_core_2023.adt` 
+        WHERE
+            pat_class = 'Inpatient' AND
+            (in_event_type = 'Admission' or out_event_type in 
+            ('Discharge', 'Transfer Out'))
+        ),
+
+        admissions_wide as (
+        SELECT 
+            *
+        FROM
+            inpatient_admits
+        PIVOT (
+            MAX(event_time_jittered_utc) as event_time
+            FOR event_type in ('Admission', 'TransferOut', 'Discharge')
+        )
+            ORDER BY anon_id, event_time_Admission
+        ),
+
+        full_cohort as (
+        SELECT
+            anon_id, pat_enc_csn_id_coded observation_id,
+            event_time_Admission index_time, 
+            CASE WHEN TIMESTAMP_DIFF(a.event_time_Discharge, 
+                                     a.event_time_Admission, DAY)< 7 AND
+            a.event_time_Discharge IS NOT NULL THEN 0
+            WHEN TIMESTAMP_DIFF(a.event_time_TransferOut,
+                                a.event_time_Admission, DAY) < 7 AND
+            a.event_time_TransferOut IS NOT NULL AND 
+            a.event_time_Discharge IS NULL THEN 0
+            ELSE 1 END label,
+            TIMESTAMP_DIFF(a.event_time_Discharge,
+                           a.event_time_Admission, DAY) time_to_discharge,
+            TIMESTAMP_DIFF(a.event_time_TransferOut, 
+                           a.event_time_Admission, DAY) time_to_transfer_out,
+            event_time_TransferOut, event_time_Discharge
+        FROM
+            admissions_wide a
+        WHERE
+            EXTRACT(YEAR FROM event_time_Admission) BETWEEN 2009 and 2024
+            AND NOT (event_time_TransferOut IS NULL AND event_time_Discharge
+            IS NULL)
+        )
+        SELECT
+        *
+        FROM
+        (SELECT *,
+                ROW_NUMBER() OVER  (PARTITION BY EXTRACT(YEAR FROM index_time)
+                                    ORDER BY RAND()) AS seqnum
+        FROM 
+            full_cohort 
+        )
+        WHERE
+            seqnum <= 10000
+
+        )
+        """
+        query_job = self.client.query(query)
+        query_job.result()
