@@ -1273,6 +1273,7 @@ class CBCWithDifferentialCohortSmall(CohortBuilder):
 
 class LongLengthOfStayCohort2023(CohortBuilder):
     """
+    seqnum <= 100000
     Defines a cohort of patients admitted to hospital, positive label for
     patients who stayed in inpatient setting for seven days or longer. 
     """
@@ -1357,7 +1358,7 @@ class LongLengthOfStayCohort2023(CohortBuilder):
             full_cohort 
         )
         WHERE
-            seqnum <= 10000
+            seqnum <= 100000
 
         )
         """
